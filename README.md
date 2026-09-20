@@ -164,6 +164,14 @@ DSH 内置的 `@deepseek-ai/dsh-client-hmr` 会轮询到重建结果，通过 `/
 node patches/apply-patches.cjs <dsh 安装根目录>
 ```
 
+## 社区 fork
+
+小鲸鱼本体以维护为主（见 [CONTRIBUTING.md](CONTRIBUTING.md)），想要更多玩法可以看看这些 fork：
+
+- [wzwei1990/dsh-pet-whale](https://github.com/wzwei1990/dsh-pet-whale) —— 多宠物架构（可在鲸鱼 / 小猫 / 灵儿之间切换，每只有独立的 SVG、动画与台词），附带 `pnpm pet:doctor` 体检脚本
+
+这些 fork 独立维护，与本仓库无关，使用前请阅读各自仓库的说明。
+
 ## 声明
 
 - 鲸鱼轮廓使用 DeepSeek 官方 FishLogo 路径（品牌素材，使用请注明出处）

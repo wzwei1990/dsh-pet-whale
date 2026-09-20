@@ -1,6 +1,6 @@
 {
   "name": "pet-whale",
-  "version": "1.2.0",
+  "version": "1.1.2",
   "description": "桌宠小鲸鱼：随 agent 状态切换动画的 DeepSeek Harness Web 桌宠插件（官方轮廓版）",
   "homepage": "https://nzl153.github.io/dsh-pet-whale/preview.html",
   "repository": {
