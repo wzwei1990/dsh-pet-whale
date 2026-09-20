@@ -134,8 +134,15 @@ git fetch origin main; git merge origin/main; pnpm pet:doctor; pnpm test
 git push fork feat/multi-pet; git push fork feat/multi-pet:main
 ```
 
-> `fork` 的 main 与分支基线同为 `8ed73aa` 时才是快进。若之后分叉了（例如上游已合并你的改动），
-> 就别再直接推 main，改成推分支 + 在 GitHub 上开 PR。
+> `fork` 的 main 与分支基线一致时才是快进。若哪天分叉了（例如上游重写了历史），
+> 就别直接推 main，改成推分支、由自己在 GitHub 上决定怎么合。
 
+## 9. 本 fork 的定位：独立维护，只进不出（2026-09-17 用户拍板）
+
+- **只从上游同步**：定期 `git fetch origin && git merge origin/main`，按第 1~3 节的流程合进来
+- **不向上游提 PR / 不向上游提交改动请求**：本仓库自己维护自己的功能（多宠物、灵儿、`pet:doctor`…），
+  上游保持 maintenance-first，各走各的
+- 版本号**与上游保持一致**（现在是 `1.1.2`）：上游发版就跟着改，这样"我这份落后多少"一眼能看出来
+- 上游 README 里已经有一节 Community forks 推荐本仓库，属于互相引用，不是提交改动
 
 需要发到 npm 的话，先改 `package.json` 的 `name` / `version`（别占用上游的包名）。
