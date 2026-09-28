@@ -59,12 +59,13 @@ for (const id of petIds) {
   }
 }
 // 公共体系（不属于任何宠物）：小按钮、气泡框、投喂、打瞌睡、粒子层、思考滚动条
-const KIT = /dsh-whale-|pw-particle-layer|pw-water-|pw-stream-|pw-splash-|pw-drag-|pw-confetti|dsh-whale-think/
+const KIT = /dsh-whale-|pat-heart|pat-press|patting|petting|edge-top|edge-bottom|pw-particle-layer|pw-water-|pw-stream-|pw-splash-|pw-drag-|pw-confetti|dsh-whale-think/
 const CONTAINER = /\.pet-official\s*\{|\.pet-official svg|\.pet-official:active/
 const offenders = []
 base.split('\n').forEach((line, i) => {
   if (!/^\s*\[data-dsh-whale/.test(line)) return
   if (CONTAINER.test(line)) return
+  if (KIT.test(line)) return // 共享部件（角标气泡、摸头按压/爱心）本就该在 BASE_CSS
   const names = [...partClasses].filter((c) => new RegExp(`\\.${c.replace(/[-]/g, '\\-')}\\b`).test(line))
   if (names.length > 0) offenders.push(`styles.ts:${i + 1} 命中宠物部件 ${names.join(',')} → ${line.trim().slice(0, 70)}`)
   else if (/\.pet-official[.\s]/.test(line) && !KIT.test(line)) offenders.push(`styles.ts:${i + 1} 宠物状态/部件规则 → ${line.trim().slice(0, 70)}`)
@@ -168,6 +169,22 @@ const runCheck = (script, label) => {
 // 旧预览工具随架构变更退役：extract-whale.mjs 已由上游删除（SVG 以 src/client/whale.ts 为准）；
 // sync-preview-pets.mjs 针对的是旧的手写 preview.html，不再作为体检项。
 
+// ---------- 5.5) 行为层 class × 每只宠物的样式覆盖 ----------
+// 上游加新状态时，很容易只给鲸鱼写样式；这里把"行为有、看不出"变成一条可读的提示。
+const behaviourSrc = readFileSync(join(root, "src", "client", "index.ts"), "utf8")
+const usedClasses = new Set()
+for (const m of behaviourSrc.matchAll(/classList\.(?:add|remove|toggle)\(['"]([a-zA-Z][\w-]*)['"]/g)) usedClasses.add(m[1])
+// 纯逻辑 class 不要求样式
+const LOGIC_ONLY = new Set(["hidden", "dragging", "open"])
+const classRe = (c) => new RegExp(`\\.${c.replace(/[-]/g, "\\-")}\\b`)
+const gaps = new Map()
+for (const id of petIds) {
+  const css = readFileSync(join(root, "src", "client", "pets", id, "styles.ts"), "utf8")
+  const lacks = [...usedClasses].filter((c) => !LOGIC_ONLY.has(c) && !classRe(c).test(base) && !classRe(c).test(css))
+  if (lacks.length > 0) gaps.set(id, lacks)
+}
+if (gaps.size === 0) ok(`行为层 ${usedClasses.size} 个状态 class 在每只宠物里都有样式`)
+else for (const [id, list] of gaps) warn(`宠物 ${id} 缺这些行为层 class 的样式（行为有、可能看不出）：${list.join(", ")}`)
 // ---------- 6) 构建产物新鲜度 ----------
 const libPath = join(root, 'lib', 'client.js')
 if (!existsSync(libPath)) bad('lib/client.js 不存在，跑 pnpm build')

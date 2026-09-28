@@ -295,7 +295,7 @@ export const LINGER_HTML = `<svg viewBox="0 0 26 48" aria-hidden="true">
 
           </g>
 
-        </svg>
+        </svg><span class="pat-heart">♥</span>
         <span class="bubble"></span>
         <span class="bubble b2"></span>
         <span class="bubble b3"></span>

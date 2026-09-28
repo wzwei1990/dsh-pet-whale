@@ -129,7 +129,7 @@ export const CAT_HTML = `<svg viewBox="0 0 26 19" aria-hidden="true">
               <ellipse cx="15.5" cy="16.8" rx="1.05" ry="0.6" style="fill:var(--pw-body-light,#8FB5FF)"/>
             </g>
           </g>
-        </svg>
+        </svg><span class="pat-heart">♥</span>
         <span class="bubble"></span>
         <span class="bubble b2"></span>
         <span class="bubble b3"></span>
