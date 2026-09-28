@@ -50,6 +50,7 @@ export class WhaleSwimmer {
   private timerId: number | undefined
   private isSwimming = false
   private facing: 'left' | 'right' = 'left'
+  private disposed = false
 
   // 物理与运动状态
   private currentPos: Point = { x: 0, y: 0 }
@@ -159,6 +160,7 @@ export class WhaleSwimmer {
     }
 
     this.clearParticles()
+    this.ctx.pet.style.opacity = '1'
 
     if (this.isSwimming) {
       this.isSwimming = false
@@ -177,7 +179,7 @@ export class WhaleSwimmer {
       window.clearTimeout(this.timerId)
       this.timerId = undefined
     }
-    if (!this.enabled) return
+    if (this.disposed || !this.enabled) return
 
     const wait = delay ?? (3000 + Math.random() * 3500)
     this.timerId = window.setTimeout(() => {
@@ -471,15 +473,17 @@ export class WhaleSwimmer {
     // 计算当前贝塞尔位置 P(ease)
     const u = ease
     const u1 = 1 - u
-    const curX = u1 * u1 * u1 * this.startPos.x +
+    const rawX = u1 * u1 * u1 * this.startPos.x +
       3 * u1 * u1 * u * this.cp1.x +
       3 * u1 * u * u * this.cp2.x +
       u * u * u * this.targetPos.x
 
-    const curY = u1 * u1 * u1 * this.startPos.y +
+    const rawY = u1 * u1 * u1 * this.startPos.y +
       3 * u1 * u1 * u * this.cp1.y +
       3 * u1 * u * u * this.cp2.y +
       u * u * u * this.targetPos.y
+    // 曲线控制点可能越界，且动画中途视口可能缩小；不能只钳终点。
+    const { x: curX, y: curY } = this.ctx.clampPos(rawX, rawY)
 
     // 计算瞬时导数切线向量（用于确定朝向与俯仰角）
     const dX = 3 * u1 * u1 * (this.cp1.x - this.startPos.x) +
@@ -544,8 +548,9 @@ export class WhaleSwimmer {
     this.ctx.pet.style.opacity = `${depthOpacity.toFixed(3)}`
 
     // 计算尾巴在视口中的绝对发射坐标（固定挂在全屏粒子层，形成自然拖尾）
-    const tailX = this.facing === 'left' ? curX + 112 : curX + 25
-    const tailY = curY + 52
+    const size = this.ctx.petSize()
+    const tailX = curX + size.w * (this.facing === 'left' ? 112 / 137 : 25 / 137)
+    const tailY = curY + size.h * 52 / 101
 
     // 1. 水流尾波圈发射（每隔 260~320ms）
     const rippleGap = isDive ? 220 : 300
@@ -585,6 +590,8 @@ export class WhaleSwimmer {
 
   /** 完全清理 */
   public dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
     this.stop()
     if (typeof document !== 'undefined') {
       const layer = document.querySelector('[data-dsh-whale-particles]')

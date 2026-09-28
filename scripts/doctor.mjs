@@ -104,7 +104,10 @@ for (const id of petIds) {
     }
     for (const m of css.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)) {
       const name = m[1]
-      if (name.startsWith('pw-')) problems.push(`styles.ts 定义了 pw-* 关键帧 ${name}（pw-* 属于 BASE_CSS）`)
+      if (name.startsWith('pw-') && id !== 'whale') {
+        // 鲸鱼私有表 = 上游 styles.ts 整表（1.2.4 起），pw-* 归它自己；其它宠物仍不得占用该前缀
+        problems.push(`styles.ts 定义了 pw-* 关键帧 ${name}（pw-* 属于 BASE_CSS / 鲸鱼私有表）`)
+      }
       if (keyframeOwners.has(name)) problems.push(`关键帧 ${name} 与宠物 ${keyframeOwners.get(name)} 重名`)
       else keyframeOwners.set(name, id)
     }
@@ -146,18 +149,12 @@ for (const id of petIds) {
 }
 
 // ---------- 4) preview.html 注入区 ----------
+// 上游 1.2.3 起 preview.html 换成"直接加载插件本体 lib/client.js"的薄页面；
+// 我们 fork 原来的手写游乐场及其 pet 注入标记（pet-css/pet-nodes/pet-ui-data/pet-mode-buttons）随之退役。
 const preview = readFileSync(join(root, 'preview.html'), 'utf8')
-const tags = ['pet-css', 'pet-nodes', 'pet-ui-data', 'pet-mode-buttons']
-for (const tag of tags) {
-  const b = preview.includes(`<!-- ${tag}:begin -->`)
-  const e = preview.includes(`<!-- ${tag}:end -->`)
-  if (!b || !e) bad(`preview.html 缺注入标记 ${tag}（${b ? '' : '缺 begin '}${e ? '' : '缺 end'}），跑 pnpm sync:preview 修复`)
-}
-// 注入的数据脚本必须在主 <script> 之前，否则会被当成脚本正文、整页塌掉
-const dataAt = preview.indexOf('id="pet-ui-data"')
-const mainAt = preview.indexOf('\n<script>')
-if (dataAt !== -1 && mainAt !== -1 && dataAt > mainAt) bad('preview.html 的 pet-ui-data 脚本在主 <script> 之后（整页会塌，必须放在前面）')
-else ok('preview.html 注入标记齐全，数据脚本位置正确')
+if (/lib\/client\.js/.test(preview)) ok('preview.html 直接加载插件本体 lib/client.js（上游 1.2.3+ 架构）')
+else bad('preview.html 没有引用 lib/client.js —— 上游版预览页应直接加载插件本体')
+if (/<!-- pet-(css|nodes|ui-data|mode-buttons):begin -->/.test(preview)) warn('preview.html 仍带 pet-* 注入标记（旧游乐场版），与上游薄页面不一致')
 
 /** 以 --check 模式跑生成脚本：只比较不写。 */
 const runCheck = (script, label) => {
@@ -168,8 +165,8 @@ const runCheck = (script, label) => {
     bad(`${label}：${String(e.stdout || e.message).trim().split('\n').pop()}`)
   }
 }
-runCheck('sync-preview-pets.mjs', 'preview.html 注入区与 src 同步')
-runCheck('extract-whale.mjs', 'whale.ts 与 preview.html 的 V2 一致')
+// 旧预览工具随架构变更退役：extract-whale.mjs 已由上游删除（SVG 以 src/client/whale.ts 为准）；
+// sync-preview-pets.mjs 针对的是旧的手写 preview.html，不再作为体检项。
 
 // ---------- 6) 构建产物新鲜度 ----------
 const libPath = join(root, 'lib', 'client.js')

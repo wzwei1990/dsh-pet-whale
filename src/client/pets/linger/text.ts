@@ -34,7 +34,6 @@ const zh: PetTextOverrides = {
   feedback: {
     roll: '旋身一礼，谢你相伴 ♡',
     feed: '（小口吃了）多谢，味道清甜。',
-    headpat: '唔……这样被摸头，倒也安心 🥰',
     hidden: '我先隐去身形，唤我便是 🌸',
     shown: '灵儿回来了，可有事吩咐？',
     schedule1h: '好，一小时后我自行隐去。',
@@ -101,7 +100,6 @@ const en: PetTextOverrides = {
   feedback: {
     roll: 'A spin and a bow, for your company ♡',
     feed: '(takes a small bite) Thank you — sweet and light.',
-    headpat: 'Mm… a headpat like that is oddly reassuring 🥰',
     hidden: 'I will veil myself; call and I come 🌸',
     shown: 'Ling\'er has returned — what do you need?',
     schedule1h: 'Very well, I will veil myself in an hour.',

@@ -54,7 +54,13 @@ export interface PetStrings {
     pretend: string
     thinkTicker: string
     swim: string
-    sound: string
+    /** 音量入口，参数是当前档的名字 */
+    volume: (name: string) => string
+    volumeOff: string
+    /** 小 / 中 / 大，与 sounds.ts 的 VOLUME_LEVELS 同序 */
+    volumeNames: [string, string, string]
+    /** 跟随所有会话 */
+    followAll: string
     /** 完成提醒（标签页标题） */
     notify: string
     /** 系统通知（需授权） */
@@ -82,7 +88,10 @@ export interface PetStrings {
     squish: string
     roll: string
     feed: string
-    headpat: string
+    /** 被摸头：鼠标蹭头顶 / 长按 / 菜单三个入口共用 */
+    patted: string[]
+    /** 蹭得太快：生气游开 */
+    patTooFast: string[]
     paletteApplied: (name: string) => string
     petApplied: (name: string) => string
     pretendOn: string
@@ -95,12 +104,15 @@ export interface PetStrings {
     scheduleDaily: string
     scheduleCancel: string
     errorCopied: string
+    errorCopyFailed: string
     wake: string
     sleep: string
     avoid: string
     swim: string[]
     swimOn: string
     swimOff: string
+    followAllOn: string
+    followAllOff: string
     joy: string[]
     pokeDizzy: string[]
     /** 连戳中段：开始不耐烦 */
@@ -117,6 +129,9 @@ export interface PetStrings {
     dragIdle: string[]
     /** 被按在屏幕边上：挤扁了 */
     squeezed: string[]
+    /** 被按在顶边 / 底边：上下压扁了 */
+    squashedTop: string[]
+    squashedBottom: string[]
     sizeSet: (name: string) => string
     notifyOn: string
     notifyOff: string
@@ -127,6 +142,19 @@ export interface PetStrings {
     sedentaryOff: string
     /** 久坐提醒时鲸鱼说的话 */
     restNudge: string[]
+  }
+  /** 跟随所有会话：别的会话的动静 */
+  multi: {
+    /** 角标的悬停提示，参数是别的会话里正在跑的个数 */
+    badge: (n: number) => string
+    doneOther: (title: string) => string
+    waitingOther: (title: string) => string
+    /** 同时在跑的会话（含当前）到 2 个，参数是个数 */
+    parallel: (n: number) => string[]
+    /** 到 OVERTIME_AT 个及以上 */
+    overtime: (n: number) => string[]
+    /** 这一批并发过的会话全部跑完 */
+    allDone: string[]
   }
   /** 页面标题闪烁与系统通知用的文案 */
   notify: {
@@ -222,7 +250,10 @@ const zh: PetStrings = {
     pretend: '💼 假装工作',
     thinkTicker: '🧠 思考链',
     swim: '🏊 游泳',
-    sound: '🔊 音效',
+    volume: (name) => `🔊 音量：${name}`,
+    volumeOff: '静音',
+    volumeNames: ['小', '中', '大'],
+    followAll: '🫧 跟随所有会话',
     notify: '🔔 完成提醒',
     sysNotify: '📢 系统通知',
     sedentary: (min) => (min === 0 ? '⏰ 久坐提醒：关' : `⏰ 久坐提醒：${min} 分钟`),
@@ -255,7 +286,17 @@ const zh: PetStrings = {
     squish: '戳一戳，心情 +1 ✨',
     roll: '翻个 360° 跟头给你看！(≧∇≦)ﾉ ✨',
     feed: '嚼嚼嚼... 获得小鱼干能量！美味~ 🐟',
-    headpat: '被摸摸头啦~ 暖洋洋的超开心 🥰',
+    patted: [
+      '被摸摸头啦~ 暖洋洋的超开心 🥰',
+      '呼噜呼噜... 再摸一下嘛 (´▽`)',
+      '头顶暖暖的，眼睛都睁不开了~ 💤',
+      '嘿嘿，被摸得好舒服 💖',
+    ],
+    patTooFast: [
+      '再摸就秃头了！😤',
+      '头顶都要搓冒烟了，不给摸了！🔥',
+      '哼，手这么重，我游远点 😤',
+    ],
     paletteApplied: (name) => `换上新皮肤「${name}」~ 🎨`,
     petApplied: (name) => `换成${name}啦~ 🐾`,
     pretendOn: '进入假装工作模式，开始表演敲代码 ⌨️💼',
@@ -268,6 +309,7 @@ const zh: PetStrings = {
     scheduleDaily: '记下啦：每天 22:00 自动藏到右下角 🌙',
     scheduleCancel: '定时隐藏已取消~',
     errorCopied: '错误信息已复制到剪贴板，快去找主人帮忙 📋',
+    errorCopyFailed: '复制失败，请检查浏览器的剪贴板权限',
     wake: '醒啦！随时准备开工~ ✨',
     sleep: '呼噜噜... 正在做深海美梦 (Zzz) 💤',
     avoid: '让一让~ 这里交给你啦 ✨',
@@ -280,6 +322,8 @@ const zh: PetStrings = {
     ],
     swimOn: '游泳模式已开启，我会自己到处游啦 🐳🌊',
     swimOff: '游泳模式已关闭，我乖乖待命~',
+    followAllOn: '别的会话有动静我也会告诉你~',
+    followAllOff: '好，我只盯着眼前这个会话~',
     joy: [
       '嘻嘻，最喜欢主人啦~ 🥰',
       '好开心！能量充满啦~ ✨',
@@ -330,6 +374,14 @@ const zh: PetStrings = {
       '这边到头咯，再推就扁了 🫠',
       '呜，脸被压平了 (＞﹏＜)',
     ],
+    squashedTop: [
+      '咚！撞到天花板了 >_<',
+      '头顶被压扁啦，再按就成饼了 🫠',
+    ],
+    squashedBottom: [
+      '被按在海底了... 扁扁的 (＞﹏＜)',
+      '压、压成鲸鱼饼了 🫓',
+    ],
     sizeSet: (name) => `变成${name}号啦~ 合适吗 🐳`,
     notifyOn: '好耶！你不在的时候我会在标签页上喊你 🔔',
     notifyOff: '不喊你了，安安静静的 🤫',
@@ -344,6 +396,14 @@ const zh: PetStrings = {
       '眼睛也要休息的，看看远处吧 ✨',
       '深海也需要浮上来换气呀，你也是 🫧',
     ],
+  },
+  multi: {
+    badge: (n) => `另外 ${n} 个会话正在跑`,
+    doneOther: (title) => (title === '' ? '另一个会话跑完啦 ✅' : `「${title}」那边跑完啦 ✅`),
+    waitingOther: (title) => (title === '' ? '另一个会话在等你确认 👀' : `「${title}」在等你确认 👀`),
+    parallel: (n) => [`${n} 个会话一起跑，全速并发推进中！🌊`, `左鳍一个右鳍一个，${n} 路并发开工~ 💨`],
+    overtime: (n) => [`${n} 个会话同时开工……这就是加班吗 😵`, `${n} 路并发？！以后再也不想加班了 😭`],
+    allDone: ['好累啊……终于全部搞定了 🫠', '呼——全部收工！让我瘫一会儿 💦'],
   },
   notify: {
     titleDone: '完成了',
@@ -437,7 +497,10 @@ const en: PetStrings = {
     pretend: '💼 Pretend to work',
     thinkTicker: '🧠 Think ticker',
     swim: '🏊 Swimming',
-    sound: '🔊 Sound',
+    volume: (name) => `🔊 Volume: ${name}`,
+    volumeOff: 'Muted',
+    volumeNames: ['Low', 'Medium', 'High'],
+    followAll: '🫧 Follow all sessions',
     notify: '🔔 Finish alert',
     sysNotify: '📢 System notification',
     sedentary: (min) => (min === 0 ? '⏰ Break reminder: off' : `⏰ Break reminder: ${min} min`),
@@ -469,7 +532,17 @@ const en: PetStrings = {
     squish: 'Poke! Mood +1 ✨',
     roll: 'A 360° flip just for you! (≧∇≦)ﾉ ✨',
     feed: 'Munch munch... fish snack energy! Yummy~ 🐟',
-    headpat: 'Headpat received~ warm and happy 🥰',
+    patted: [
+      'Headpat received~ warm and happy 🥰',
+      'Mmm... one more pat, please (´▽`)',
+      'So cozy up here, my eyes are closing~ 💤',
+      'Hehe, that feels so nice 💖',
+    ],
+    patTooFast: [
+      'Any more and I go bald! 😤',
+      'My head is about to smoke. No more pats! 🔥',
+      'Hmph, too rough. I am swimming away 😤',
+    ],
     paletteApplied: (name) => `New skin applied: ${name}~ 🎨`,
     petApplied: (name) => `Now playing as ${name}~ 🐾`,
     pretendOn: 'Entering pretend-work mode, time to type ⌨️💼',
@@ -482,6 +555,7 @@ const en: PetStrings = {
     scheduleDaily: 'Got it: I will auto-hide at 22:00 every day 🌙',
     scheduleCancel: 'Auto-hide cancelled~',
     errorCopied: 'Error copied to clipboard, go ask for help 📋',
+    errorCopyFailed: 'Copy failed. Please check clipboard permission in your browser.',
     wake: 'Awake! Ready to work~ ✨',
     sleep: 'Zzz... dreaming in the deep sea (Zzz) 💤',
     avoid: 'Let me make room for you~ ✨',
@@ -494,6 +568,8 @@ const en: PetStrings = {
     ],
     swimOn: 'Swimming mode on: I will roam around by myself 🐳🌊',
     swimOff: 'Swimming mode off: I will stay put~',
+    followAllOn: 'I will keep an eye on your other sessions too~',
+    followAllOff: 'Got it, just this session~',
     joy: [
       'Hehe, love you the most! 🥰',
       'So happy! Energy fully restored~ ✨',
@@ -544,6 +620,14 @@ const en: PetStrings = {
       'That is the edge. Push more and I go flat 🫠',
       'Ow, my face is flattened (＞﹏＜)',
     ],
+    squashedTop: [
+      'Bonk! Hit the ceiling >_<',
+      'My head got flattened. Any more and I am a pancake 🫠',
+    ],
+    squashedBottom: [
+      'Pinned to the seabed... so flat (＞﹏＜)',
+      'Squashed into a whale pancake 🫓',
+    ],
     sizeSet: (name) => `Now I am ${name} size~ Does it fit? 🐳`,
     notifyOn: 'Got it! I will shout from the tab title while you are away 🔔',
     notifyOff: 'Staying quiet now 🤫',
@@ -558,6 +642,14 @@ const en: PetStrings = {
       'Eyes need rest too — look at something far away ✨',
       'Even the deep sea surfaces to breathe. So should you 🫧',
     ],
+  },
+  multi: {
+    badge: (n) => `${n} other session${n === 1 ? '' : 's'} running`,
+    doneOther: (title) => (title === '' ? 'Another session just finished ✅' : `"${title}" just finished ✅`),
+    waitingOther: (title) => (title === '' ? 'Another session needs your confirmation 👀' : `"${title}" needs your confirmation 👀`),
+    parallel: (n) => [`${n} sessions at once — full-speed parallel push! 🌊`, `One per fin: ${n} running in parallel~ 💨`],
+    overtime: (n) => [`${n} sessions at once... is this what overtime feels like 😵`, `${n} in parallel?! No more overtime, ever 😭`],
+    allDone: ['So tired... finally got every last one done 🫠', 'Phew — all wrapped up! Let me flop for a bit 💦'],
   },
   notify: {
     titleDone: 'Done',

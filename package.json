@@ -1,7 +1,7 @@
 {
   "name": "pet-whale",
-  "version": "1.1.2",
-  "description": "桌宠小鲸鱼：随 agent 状态切换动画的 DeepSeek Harness Web 桌宠插件（官方轮廓版）",
+  "version": "1.2.4",
+  "description": "桌宠小鲸鱼：DeepSeek Harness 桌宠插件，桌面端和网页端都能用，随 agent 状态切换动画（官方轮廓版）",
   "homepage": "https://nzl153.github.io/dsh-pet-whale/preview.html",
   "repository": {
     "type": "git",
@@ -19,6 +19,7 @@
     "pet"
   ],
   "license": "MIT",
+  "publishConfig": { "registry": "https://registry.npmjs.org/" },
   "type": "module",
   "main": "lib/index.mjs",
   "exports": {
@@ -45,7 +46,8 @@
         "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-conversation",
-        "@deepseek-ai/dsh-client-ui-chat"
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-session"
       ]
     },
     "compatibility": {
@@ -53,7 +55,10 @@
       "dshReleases": {
         "0.1.5-alpha.2": "compatible",
         "0.1.5-rc.1": "compatible",
-        "0.1.5-rc.2": "compatible"
+        "0.1.5-rc.2": "compatible",
+        "0.1.5-rc.3": "compatible",
+        "0.1.7-rc.1": "compatible",
+        "0.1.7-rc.2": "compatible"
       }
     }
   },
@@ -62,20 +67,19 @@
     "dev:client": "tsdown --config ./tsdown.config.ts --watch",
     "build": "tsdown --config ./tsdown.config.ts && node scripts/verify-build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/smoke.mjs",
+    "test": "node tests/smoke.mjs && node --test tests/regression.mjs tests/hmr.mjs",
+    "prepack": "npm run typecheck && npm run build && npm test",
     "verify:hmr": "node scripts/verify-hmr.mjs",
-    "extract": "node scripts/extract-whale.mjs",
     "pet:doctor": "node scripts/doctor.mjs",
-    "sync:preview": "node scripts/sync-preview-pets.mjs",
     "preview": "node scripts/preview-pets.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-api-session-controller": "0.1.5-rc.2",
-    "@deepseek-ai/dsh-client-locale": "0.1.5-rc.2",
-    "@deepseek-ai/dsh-client-store": "0.1.5-rc.2",
-    "@deepseek-ai/dsh-client-ui-chat": "0.1.5-rc.2",
-    "@deepseek-ai/dsh-client-ui-conversation": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-client-locale": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-client-store": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-client-ui-chat": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.1.7-rc.2",
     "jsdom": "^30.0.1",
     "tsdown": "0.22.2",
     "typescript": "^5.6.0"

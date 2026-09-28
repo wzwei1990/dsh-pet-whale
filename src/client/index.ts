@@ -1,21 +1,23 @@
 // pet-whale client bundle：纯 DOM 桌宠。
-// apply(ctx) 由官方 client 通道调用；状态来自 ctx.sessions（会话生命周期快照）
-// 与 ctx.uiConversation（会话对话视图，提供 partial / runningCalls / turnEnds）。
+// apply(ctx) 由官方 client 通道调用；状态来自 ctx.sessions（会话生命周期快照）、
+// ctx.uiConversation（会话对话视图，提供 partial / runningCalls / turnEnds）
+// 与 ctx.uiSession.sessionStatus（0.1.7：每个会话的 running / 待确认，用于跟随所有会话）。
 import type { Context } from '@deepseek-ai/cordis'
 import type { ISessions, SessionFace } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ChatSnapshot } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { BASE_CSS } from './styles'
-import { WhaleSounds } from './sounds'
+import { VOLUME_LEVELS, WhaleSounds } from './sounds'
 import { WhaleDriver, type WhaleSnapshot, type WhaleState } from './state'
 import { PALETTES, applyPalette, loadPaletteId, paletteOf, savePaletteId } from './palettes'
 import { PETS, loadPetId, petOf, savePetId, type PetModule } from './pets'
 import { detectBrowserLocale, getStrings, paletteName, petName, type PetLocale, type PetStrings } from './i18n'
 import { WhaleSwimmer } from './swim'
 
-// 官方 client 通道的服务闸：等 sessions / locale / uiConversation 服务就绪后再 apply。
+// 官方 client 通道的服务闸：等 sessions / locale / uiConversation / uiSession 服务就绪后再 apply。
 // uiConversation 由 @deepseek-ai/dsh-client-ui-conversation 提供，
-// chat 视图（ChatSnapshot）由 @deepseek-ai/dsh-client-ui-chat 注册。
-export const inject = ['sessions', 'locale', 'uiConversation']
+// chat 视图（ChatSnapshot）由 @deepseek-ai/dsh-client-ui-chat 注册，
+// uiSession 由 @deepseek-ai/dsh-client-ui-session 提供（0.1.5 就有，sessionStatus 是 0.1.7 才加的）。
+export const inject = ['sessions', 'locale', 'uiConversation', 'uiSession']
 
 const STATES: readonly WhaleState[] = ['idle', 'think', 'working', 'celebrate', 'error', 'wait', 'disappointed']
 const POS_KEY = 'pet-whale:pos'
@@ -81,15 +83,67 @@ const SOUND_GAP_MS = 1200
 
 const pick = (list: string[]): string => list[Math.floor(Math.random() * list.length)]
 
+/** 跟随所有会话：别的会话在跑 / 跑完 / 等确认也让鲸鱼知道，'0' 表示只看当前会话 */
+const FOLLOW_ALL_KEY = 'pet-whale:follow-all'
+/** 同时在跑的会话（含当前）到这个数就算"加班" */
+const OVERTIME_AT = 4
+
 /** DSH locale 服务的最小接口（不引入额外依赖）。 */
 interface LocaleLike {
   getLocale(): { active: string }
   subscribe(fn: () => void): () => void
 }
 
+/** dsh-client-ui-session 的 SessionStatus 最小面（0.1.7）。 */
+interface SessionStatusLike {
+  readonly running: boolean | undefined
+  readonly pendingInteraction: unknown
+}
+interface SessionStatusSource {
+  getSnapshot(): ReadonlyMap<string, SessionStatusLike>
+  subscribe(fn: () => void): () => void
+}
+
+type SessionList = ReturnType<ISessions['list']['getSnapshot']>
+type SessionRow = { displayTitle?: string; parentId?: string; origin?: string; retainedBy?: Partial<Record<string, number>> }
+
+/**
+ * 当前会话。0.1.5 的会话列表直接给 current；0.1.7 起导航归视图所有（列表里没有 current 了），
+ * 主视图用 mainView 这个来源持有它正在显示的会话，看 retainedBy 就知道是哪个。
+ */
+function currentSessionId(list: SessionList): string | undefined {
+  // 字段存在就是 0.1.5 形状，undefined 也是它的答案（没选中会话）
+  if ('current' in list) return (list as { current?: string }).current
+  const rows = (list.byId ?? {}) as Readonly<Record<string, SessionRow | undefined>>
+  for (const id of Object.keys(rows)) {
+    if ((rows[id]?.retainedBy?.mainView ?? 0) > 0) return id
+  }
+  return undefined
+}
+
 export function apply(ctx: Context): () => void {
   if (typeof document === 'undefined') return () => {}
 
+  // 挂在 document 上，bundle 重新求值后仍能找到上一代 disposer。
+  const owner = document as Document & { __petWhaleDispose?: () => void }
+  owner.__petWhaleDispose?.()
+  let disposed = false
+  const timers = new Set<number>()
+  const later = (fn: () => void, ms: number): number => {
+    if (disposed) return 0
+    const id = window.setTimeout(() => {
+      timers.delete(id)
+      if (!disposed) fn()
+    }, ms)
+    timers.add(id)
+    return id
+  }
+  const cancelLater = (id: number | undefined) => {
+    window.clearTimeout(id)
+    if (id !== undefined) timers.delete(id)
+  }
+  // 仅处理没有 disposer 的旧版残留节点。
+  document.querySelectorAll('[data-dsh-whale-mini], [data-dsh-whale-particles]').forEach((el) => el.remove())
   // 双挂载防护：先清掉旧实例
   document.querySelectorAll('[data-dsh-whale]').forEach((el) => el.remove())
   document.getElementById('pet-whale-style')?.remove()
@@ -110,7 +164,7 @@ export function apply(ctx: Context): () => void {
 
     // ===== 语言 =====
     const localeService = (ctx as unknown as { locale?: LocaleLike }).locale
-    let locale: PetLocale = localeService?.getLocale().active === 'en' ? 'en' : detectBrowserLocale()
+    let locale: PetLocale = localeService ? (localeService.getLocale().active === 'en' ? 'en' : 'zh') : detectBrowserLocale()
 
   // ===== 宠物 =====
   // 当前宠物决定 .pet-official 塞哪段 SVG、挂哪张私有样式表、说什么话；选择记在 localStorage。
@@ -119,7 +173,6 @@ export function apply(ctx: Context): () => void {
   const petDisplayName = (p: PetModule): string => petName(locale, p.id, locale === 'en' ? p.name.en : p.name.zh)
   /** 当前语言的文案：基准是鲸鱼口吻，宠物可以用 text 覆盖它（见 pets/cat/text.ts） */
   let strings: PetStrings = getStrings(locale, activePet.text?.[locale])
-
   // ===== DOM =====
   const root = document.createElement('div')
   root.setAttribute('data-dsh-whale', '')
@@ -131,9 +184,11 @@ export function apply(ctx: Context): () => void {
     <span class="dsh-whale-snack">🐟</span>
     <span class="dsh-whale-zzz">Zzz...</span>
     <div class="pet-official idle" role="img" aria-label="${strings.aria.petName(petDisplayName(activePet))}">${activePet.html}</div>
+    <span class="dsh-whale-badge" hidden></span>
     <div class="dsh-whale-menu" role="menu"></div>
   `
   const dialog = root.querySelector<HTMLElement>('.dsh-whale-dialog')!
+  const badge = root.querySelector<HTMLElement>('.dsh-whale-badge')!
   const snack = root.querySelector<HTMLElement>('.dsh-whale-snack')!
   // 容器本身永不重建，只有它的 innerHTML 随宠物切换 → 容器上的状态 class 原地保留
   const pet = root.querySelector<HTMLElement>('.pet-official')!
@@ -257,17 +312,28 @@ export function apply(ctx: Context): () => void {
       // 忽略存储失败
     }
   }
-  const onResize = () => place()
+  const onResize = () => {
+    cancelAvoid()
+    swimmer.stop()
+    place()
+    if (mini !== null) {
+      const p = miniClamp(parseFloat(mini.style.right) || 0, parseFloat(mini.style.bottom) || 0)
+      mini.style.right = `${p.right}px`
+      mini.style.bottom = `${p.bottom}px`
+    }
+    if (ticker.classList.contains('show')) positionTicker()
+    if (visualState === 'idle') swimmer.scheduleNext()
+  }
 
   // ===== 台词 =====
   let dialogTimer: number | undefined
   const showDialog = (text: string) => {
     // 隐藏时不说话，避免“看不见的鲸鱼还在自言自语”
-    if (root.classList.contains('hidden')) return
+    if (disposed || root.classList.contains('hidden')) return
     dialog.textContent = text
     dialog.classList.add('show')
-    window.clearTimeout(dialogTimer)
-    dialogTimer = window.setTimeout(() => dialog.classList.remove('show'), DIALOG_MS)
+    cancelLater(dialogTimer)
+    dialogTimer = later(() => dialog.classList.remove('show'), DIALOG_MS)
   }
 
   // ===== 音效 =====
@@ -313,7 +379,7 @@ export function apply(ctx: Context): () => void {
     b.classList.remove('show')
     void b.offsetWidth
     b.classList.add('show')
-    window.setTimeout(() => b.classList.remove('show'), 950)
+    expireClass(b, 'show', 950)
   }
 
   // ===== 游泳系统 =====
@@ -328,7 +394,9 @@ export function apply(ctx: Context): () => void {
     petSize,
     isBusy: () =>
       root.classList.contains(HIDDEN_CLASS) ||
-      dragging ||
+      dragStart !== null ||
+      pet.classList.contains('petting') ||
+      pet.classList.contains('belly-up') ||
       document.hidden ||
       menu.classList.contains('open') ||
       sleeping ||
@@ -437,22 +505,30 @@ export function apply(ctx: Context): () => void {
     if (tier <= st.bondTier) return
     st.bondTier = tier
     saveStats(st)
-    window.setTimeout(() => showDialog(strings.bond.levelUp[tier]), 1500)
+    later(() => showDialog(strings.bond.levelUp[tier]), 1500)
   }
 
+  let stateInitialized = false
   const setState = (next: WhaleState, changed: boolean) => {
     const effective: WhaleState = pretendOn ? 'working' : next
     // 真开始干活了就别端着脾气，闹脾气只在闲着的时候成立
     if (effective !== 'idle' && sulking) clearSulk()
     if (effective !== 'idle') wake()
     for (const s of STATES) pet.classList.toggle(s, s === effective)
+    if (effective === 'error' && visualState !== 'error') {
+      endPat()
+      clearReaction()
+    }
     visualState = effective
     syncMiniState(effective)
-    swimmer.onStateChange(effective)
-    if (effective === 'idle') scheduleIdleMicro()
-    else {
-      clearIdleMicro()
-      clearMicroAction() // 离场时把还没演完的原地动作收掉（首尾都是中性姿态，硬切看不出）
+    if (changed || !stateInitialized) {
+      swimmer.onStateChange(effective)
+      if (effective === 'idle') scheduleIdleMicro()
+      else {
+        clearIdleMicro()
+        clearMicroAction() // 离场时把还没演完的原地动作收掉（首尾都是中性姿态，硬切看不出）
+      }
+      stateInitialized = true
     }
     if (changed) {
       showDialog(pick(strings.status[effective]))
@@ -469,16 +545,32 @@ export function apply(ctx: Context): () => void {
     }
   }
 
+  // 同一动作重触发只能由最新 timer 收尾；互斥动作不能叠加眼睛和 transform。
+  const reactionClasses = ['squish', 'rolling', 'dizzy', 'joy', 'annoyed', 'shaken', 'belly-up', 'welcome']
+  const classTimers = new Map<string, number>()
+  const expireClass = (el: Element, name: string, ms: number) => {
+    const key = el === pet ? name : `${name}:${Array.from(pet.querySelectorAll('.bubble')).indexOf(el)}`
+    cancelLater(classTimers.get(key))
+    classTimers.set(key, later(() => { classTimers.delete(key); el.classList.remove(name) }, ms))
+  }
+  const clearReaction = () => {
+    for (const name of reactionClasses) {
+      cancelLater(classTimers.get(name))
+      classTimers.delete(name)
+      pet.classList.remove(name)
+    }
+  }
   // ===== 戳戳 / 翻滚 / 开心 / 戳晕 / 欢迎 =====
   const triggerSquish = () => {
     markActive()
     recordInteraction()
     popBubble()
     sounds.play('bubble')
+    clearReaction()
     pet.classList.remove('squish', 'dizzy', 'joy')
     void pet.offsetWidth
     pet.classList.add('squish')
-    window.setTimeout(() => pet.classList.remove('squish'), 450)
+    expireClass(pet, 'squish', 450)
     showDialog(pick(strings.bond.poke[currentTier()]))
   }
   const triggerRoll = () => {
@@ -486,6 +578,7 @@ export function apply(ctx: Context): () => void {
     recordInteraction()
     sounds.play('trick')
     showDialog(strings.feedback.roll)
+    clearReaction()
     pet.classList.remove('rolling', 'dizzy', 'joy')
     void pet.offsetWidth
     pet.classList.add('rolling', 'spouting')
@@ -494,30 +587,33 @@ export function apply(ctx: Context): () => void {
     swimmer.spawnSplash(curX + PET_W() / 2, curY + PET_H() * 0.64, 6)
     swimmer.spawnWaterRipple(curX + PET_W() / 2, curY + PET_H() * 0.64, false)
     popBubble()
-    window.setTimeout(() => popBubble(), 200)
-    window.setTimeout(() => pet.classList.remove('rolling', 'spouting'), 1100)
+    later(() => popBubble(), 200)
+    expireClass(pet, 'rolling', 1100)
+    expireClass(pet, 'spouting', 1100)
   }
   const triggerJoy = () => {
     if (root.classList.contains(HIDDEN_CLASS)) return
     markActive()
     recordInteraction()
+    clearReaction()
     pet.classList.remove('joy', 'squish', 'dizzy')
     void pet.offsetWidth
     pet.classList.add('joy')
     sounds.play('celebrate')
     showDialog(pick(strings.feedback.joy))
     popBubble()
-    window.setTimeout(() => pet.classList.remove('joy'), 1100)
+    expireClass(pet, 'joy', 1100)
   }
   const triggerDizzy = () => {
     markActive()
     recordInteraction()
+    clearReaction()
     pet.classList.remove('dizzy', 'squish', 'joy')
     void pet.offsetWidth
     pet.classList.add('dizzy')
     sounds.play('bubble')
     showDialog(pick(strings.feedback.pokeDizzy))
-    window.setTimeout(() => pet.classList.remove('dizzy'), 900)
+    expireClass(pet, 'dizzy', 900)
   }
   // ===== 连戳升级 =====
   // 戳一下就随机演一个，戳二十下还是同样的随机分布——那是控件，不是活物。
@@ -535,7 +631,7 @@ export function apply(ctx: Context): () => void {
 
   const clearSulk = () => {
     if (sulkTimer !== 0) {
-      window.clearTimeout(sulkTimer)
+      cancelLater(sulkTimer)
       sulkTimer = 0
     }
     sulking = false
@@ -543,8 +639,8 @@ export function apply(ctx: Context): () => void {
   }
   const bumpPokeStreak = () => {
     pokeStreak += 1
-    if (pokeDecayTimer !== 0) window.clearTimeout(pokeDecayTimer)
-    pokeDecayTimer = window.setTimeout(() => {
+    if (pokeDecayTimer !== 0) cancelLater(pokeDecayTimer)
+    pokeDecayTimer = later(() => {
       pokeDecayTimer = 0
       pokeStreak = 0
     }, POKE_DECAY_MS)
@@ -552,24 +648,26 @@ export function apply(ctx: Context): () => void {
   const triggerAnnoyed = () => {
     markActive()
     recordInteraction()
+    clearReaction()
     pet.classList.remove('annoyed', 'squish', 'dizzy', 'joy')
     void pet.offsetWidth
     pet.classList.add('annoyed')
     sounds.play('bubble')
     showDialog(pick(strings.feedback.pokeAnnoyed))
-    window.setTimeout(() => pet.classList.remove('annoyed'), 520)
+    expireClass(pet, 'annoyed', 520)
   }
   const triggerSulk = () => {
     markActive()
     recordInteraction()
     clearSulk()
     sulking = true
+    clearReaction()
     pet.classList.remove('annoyed', 'squish', 'dizzy', 'joy', 'rolling')
     void pet.offsetWidth
     pet.classList.add('sulking')
     sounds.play('bubble')
     showDialog(pick(strings.feedback.pokeSulk))
-    sulkTimer = window.setTimeout(() => {
+    sulkTimer = later(() => {
       sulkTimer = 0
       clearSulk()
       pokeStreak = 0
@@ -581,13 +679,14 @@ export function apply(ctx: Context): () => void {
     recordInteraction()
     clearSulk()
     pokeStreak = 0
+    clearReaction()
     pet.classList.remove('joy', 'squish', 'dizzy', 'annoyed')
     void pet.offsetWidth
     pet.classList.add('joy')
     sounds.play('celebrate')
     showDialog(pick(strings.feedback.comfort))
     popBubble()
-    window.setTimeout(() => pet.classList.remove('joy'), 1100)
+    expireClass(pet, 'joy', 1100)
   }
 
   // ===== 完成提醒：你不看着的时候，让标签页替它喊你 =====
@@ -601,6 +700,8 @@ export function apply(ctx: Context): () => void {
     // 忽略存储失败
   }
   const hasNotificationApi = typeof window !== 'undefined' && 'Notification' in window
+  let permissionRequest = 0
+  const notifications = new Set<Notification>()
   /** 我们改写标题前的原值；null 表示当前没在闪 */
   let titleBeforeFlash: string | null = null
   let flashedTitle = ''
@@ -623,7 +724,8 @@ export function apply(ctx: Context): () => void {
     if (Notification.permission !== 'granted') return
     try {
       const n = new Notification(`${activePet.icon} ${strings.notify.titleDone}`, { body: strings.notify.bodyDone })
-      window.setTimeout(() => n.close(), 6000)
+      notifications.add(n)
+      later(() => { notifications.delete(n); n.close() }, 6000)
     } catch {
       // 通知构造失败（部分环境要求 ServiceWorker）时静默降级到标题闪烁
     }
@@ -654,7 +756,8 @@ export function apply(ctx: Context): () => void {
     pet.classList.add('welcome', 'spouting')
     showDialog(pick(strings.feedback.restNudge))
     sounds.play('bubble')
-    window.setTimeout(() => pet.classList.remove('welcome', 'spouting'), 1400)
+    expireClass(pet, 'welcome', 1400)
+    expireClass(pet, 'spouting', 1400)
   }
   const sedentaryTick = () => {
     if (sedentaryMin === 0) return
@@ -676,12 +779,13 @@ export function apply(ctx: Context): () => void {
 
   const triggerWelcome = () => {
     if (root.classList.contains(HIDDEN_CLASS) || visualState !== 'idle') return
+    clearReaction()
     pet.classList.remove('welcome')
     void pet.offsetWidth
     pet.classList.add('welcome')
     showDialog(strings.bond.welcome[currentTier()])
     sounds.play('bubble')
-    window.setTimeout(() => pet.classList.remove('welcome'), 1200)
+    expireClass(pet, 'welcome', 1200)
   }
 
   // ===== 隐藏 / 小按钮 / 状态指示 / 拖拽 / 定时 / 关闭 =====
@@ -733,21 +837,23 @@ export function apply(ctx: Context): () => void {
   }
 
   // ===== 小按钮拖拽 =====
-  let miniDrag: { x: number; y: number; right: number; bottom: number } | null = null
+  let miniDrag: { pointerId: number; x: number; y: number; right: number; bottom: number } | null = null
   let miniDragging = false
   let miniSuppressClick = false
   const onMiniPointerDown = (e: PointerEvent) => {
-    if (e.button !== 0 || mini === null) return
+    if (disposed || e.button !== 0 || e.isPrimary === false || mini === null || miniDrag !== null) return
+    miniSuppressClick = false
     miniDrag = {
+      pointerId: e.pointerId,
       x: e.clientX,
       y: e.clientY,
       right: parseFloat(mini.style.right) || 0,
       bottom: parseFloat(mini.style.bottom) || 0,
     }
-    mini.setPointerCapture(e.pointerId)
+    try { mini.setPointerCapture(e.pointerId) } catch { /* window 事件兜底 */ }
   }
   const onMiniPointerMove = (e: PointerEvent) => {
-    if (miniDrag === null || mini === null) return
+    if (miniDrag === null || mini === null || e.pointerId !== miniDrag.pointerId) return
     const dx = e.clientX - miniDrag.x
     const dy = e.clientY - miniDrag.y
     if (!miniDragging && Math.abs(dx) + Math.abs(dy) > 4) {
@@ -761,19 +867,22 @@ export function apply(ctx: Context): () => void {
       mini.style.bottom = `${p.bottom}px`
     }
   }
-  const onMiniDragEnd = () => {
-    if (miniDrag === null) return
+  const onMiniDragEnd = (e?: PointerEvent) => {
+    if (miniDrag === null || (e && e.pointerId !== miniDrag.pointerId)) return
+    const id = miniDrag.pointerId
     miniDrag = null
+    try { mini?.releasePointerCapture(id) } catch { /* 指针已被浏览器释放 */ }
     if (miniDragging) {
       miniDragging = false
       // mini 可能已被 removeMini 清掉（桌宠被召回），但 miniDragging 仍必须复位
       mini?.classList.remove('dragging')
       saveMiniPos()
     }
-    window.setTimeout(() => { miniSuppressClick = false }, 0)
+    // 下一次 pointerdown 再重置，避免移动端延迟 click 误召回。
   }
 
   const removeMini = () => {
+    onMiniDragEnd()
     mini?.remove()
     mini = null
   }
@@ -794,9 +903,7 @@ export function apply(ctx: Context): () => void {
       showWhale()
     })
     mini.addEventListener('pointerdown', onMiniPointerDown)
-    mini.addEventListener('pointermove', onMiniPointerMove)
-    mini.addEventListener('pointerup', onMiniDragEnd)
-    mini.addEventListener('pointercancel', onMiniDragEnd)
+    mini.addEventListener('lostpointercapture', onMiniDragEnd)
     document.body.appendChild(mini)
   }
 
@@ -812,10 +919,19 @@ export function apply(ctx: Context): () => void {
     triggerSquish()
     showDialog(strings.feedback.shown)
     swimmer.scheduleNext(1500)
+    onSnapshot()
+    if (!badge.hidden) startFollow()
   }
   const hideWhale = () => {
+    endDrag()
+    endPat()
+    hideTicker()
+    clearIdleMicro()
+    cancelAvoid()
     swimmer.stop()
     root.classList.add(HIDDEN_CLASS)
+    if (followRaf !== 0) window.cancelAnimationFrame(followRaf)
+    followRaf = 0
     try {
       localStorage.setItem(HIDDEN_KEY, '1')
     } catch {
@@ -897,7 +1013,9 @@ export function apply(ctx: Context): () => void {
     }
   }
   const tickerTick = () => {
-    const max = Math.max(0, tickerText.scrollWidth - ticker.clientWidth)
+    if (document.hidden || root.classList.contains('hidden')) { hideTicker(); return }
+    positionTicker()
+    const max = Math.max(0, tickerText.scrollWidth - ticker.querySelector('.dsh-whale-think-scroll')!.clientWidth)
     tickerOffset += 0.5
     if (tickerOffset > max + 40) tickerOffset = 0
     tickerText.style.transform = `translateX(-${tickerOffset}px)`
@@ -915,15 +1033,16 @@ export function apply(ctx: Context): () => void {
     ticker.style.top = `${rect.top - 40}px`
   }
   const updateTicker = (text: string) => {
-    if (text.trim() === '') {
+    if (text.trim() === '' || pretendOn || document.hidden || root.classList.contains('hidden')) {
       hideTicker()
       return
     }
-    tickerText.textContent = text.slice(-THINK_TICKER_MAX)
-    tickerOffset = 0
+    const nextText = text.slice(-THINK_TICKER_MAX)
+    if (tickerText.textContent !== nextText) tickerOffset = 0
+    tickerText.textContent = nextText
     positionTicker()
     ticker.classList.add('show')
-    if (tickerRaf === 0) tickerRaf = window.requestAnimationFrame(tickerTick)
+    if (!reduceMotion && tickerRaf === 0) tickerRaf = window.requestAnimationFrame(tickerTick)
   }
   const partialTextOf = (partial: unknown): string => {
     if (partial === null || typeof partial !== 'object') return ''
@@ -958,6 +1077,9 @@ export function apply(ctx: Context): () => void {
     mini?.classList.toggle('paused', document.hidden)
     if (document.hidden) {
       hiddenSince = Date.now()
+      endDrag()
+      onMiniDragEnd()
+      endPat()
       hideTicker()
       swimmer.stop()
     } else {
@@ -965,11 +1087,48 @@ export function apply(ctx: Context): () => void {
       restoreTitle()
       if (hiddenSince !== 0 && Date.now() - hiddenSince >= SEDENTARY_AWAY_RESET_MS) sittingMs = 0
       hiddenSince = 0
+      onSnapshot()
       if (visualState === 'idle') swimmer.scheduleNext(2000)
     }
   }
   document.addEventListener('visibilitychange', onVisibility)
-  onVisibility()
+
+  // ===== 角标跟着鲸鱼身体起伏 =====
+  // 各状态的浮动动画不一样（idle 3.2s、睡觉 4s、游泳 0.85s、干活整只在晃），CSS 同步不了，
+  // 只能每帧读身体的实际位置。只取"起伏"：用慢速均值当基线，角标位移 = 当前位置 - 基线，
+  // 这样角标还钉在头前方，只跟着上下左右晃。只在角标显示、页面可见时跑。
+  const petBody = pet.querySelector<SVGGElement>('.body')
+  const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  let followRaf = 0
+  let baseX = Number.NaN
+  let baseY = Number.NaN
+  const FOLLOW_MAX = 18
+  const clampFollow = (v: number) => Math.max(-FOLLOW_MAX, Math.min(FOLLOW_MAX, v))
+  const followBody = () => {
+    followRaf = 0
+    if (badge.hidden || document.hidden || root.classList.contains('hidden') || petBody === null) return
+    const b = petBody.getBoundingClientRect()
+    const r = root.getBoundingClientRect()
+    const x = b.left + b.width / 2 - r.left
+    const y = b.top + b.height / 2 - r.top
+    if (Number.isNaN(baseX)) {
+      baseX = x
+      baseY = y
+    }
+    // 约 2 秒的时间常数：比任何一种浮动周期都慢，基线不会被起伏本身带跑
+    baseX += (x - baseX) * 0.008
+    baseY += (y - baseY) * 0.008
+    badge.style.translate = `${clampFollow(x - baseX).toFixed(1)}px ${clampFollow(y - baseY).toFixed(1)}px`
+    followRaf = window.requestAnimationFrame(followBody)
+  }
+  const startFollow = () => {
+    if (reduceMotion || followRaf !== 0) return
+    followRaf = window.requestAnimationFrame(followBody)
+  }
+  const onFollowVisibility = () => {
+    if (!document.hidden && !badge.hidden) startFollow()
+  }
+  document.addEventListener('visibilitychange', onFollowVisibility)
 
           // ===== 右键菜单 =====
     let menuMode: 'main' | 'more' | 'appearance' | 'behavior' | 'stats' | 'rest' = 'main'
@@ -1038,7 +1197,7 @@ export function apply(ctx: Context): () => void {
               snack.classList.add('drop')
               sounds.play('snack')
               showDialog(strings.feedback.feed)
-              window.setTimeout(() => {
+              later(() => {
                 triggerJoy()
               }, 600)
             },
@@ -1046,7 +1205,7 @@ export function apply(ctx: Context): () => void {
           [
             strings.menu.headpat,
             () => {
-              triggerJoy()
+              triggerPat()
             },
           ],
           [
@@ -1059,7 +1218,8 @@ export function apply(ctx: Context): () => void {
                 // 忽略存储失败
               }
               updateTicker('')
-              setState(pretendOn ? 'working' : 'idle', true)
+              stateInitialized = false
+              onSnapshot()
               showDialog(pretendOn ? strings.feedback.pretendOn : strings.feedback.pretendOff)
             },
           ],
@@ -1081,14 +1241,7 @@ export function apply(ctx: Context): () => void {
             },
           ],
           ...(lastErrorText !== ''
-            ? [[strings.menu.copyError, () => {
-                try {
-                  void navigator.clipboard?.writeText(lastErrorText)
-                } catch {
-                  // 忽略剪贴板失败
-                }
-                showDialog(strings.feedback.errorCopied)
-              }] as [string, () => void]]
+            ? [[strings.menu.copyError, () => { void copyError() }] as [string, () => void]]
             : []),
           [
             strings.menu.more,
@@ -1214,14 +1367,33 @@ export function apply(ctx: Context): () => void {
           menu.classList.add('open')
           positionMenu(lastMenuPos.x, lastMenuPos.y)
         })
-appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () => {
-          const next = !sounds.isMuted
-          sounds.setMuted(next)
-          buildMenu('behavior')
-          menu.classList.add('open')
-          positionMenu(lastMenuPos.x, lastMenuPos.y)
-          if (next) sounds.play('bubble')
+        // 音量：静音 → 小 → 中 → 大 → 静音；换完响一声让人听到新音量
+        appendMenuBtn(strings.panel.volume(sounds.isMuted ? strings.panel.volumeOff : strings.panel.volumeNames[VOLUME_LEVELS.indexOf(sounds.volume)]), () => {
+          if (sounds.isMuted) {
+            sounds.setMuted(false)
+            sounds.setVolume('low')
+          } else if (sounds.volume === 'high') {
+            sounds.setMuted(true)
+          } else {
+            sounds.setVolume(VOLUME_LEVELS[VOLUME_LEVELS.indexOf(sounds.volume) + 1])
+          }
+          reopenMenu('behavior')
+          sounds.play('bubble')
         })
+        if (statusSource !== undefined) {
+          appendMenuBtn(`${strings.panel.followAll}${followAll ? ' ✓' : ' ✕'}`, () => {
+            followAll = !followAll
+            try {
+              localStorage.setItem(FOLLOW_ALL_KEY, followAll ? '1' : '0')
+            } catch {
+              // 忽略存储失败
+            }
+            updateBadge()
+            onSnapshot()
+            showDialog(followAll ? strings.feedback.followAllOn : strings.feedback.followAllOff)
+            reopenMenu('behavior')
+          })
+        }
         appendMenuBtn(`${strings.panel.notify}${notifyOn ? ' ✓' : ' ✕'}`, () => {
           notifyOn = !notifyOn
           try {
@@ -1236,7 +1408,9 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
         if (hasNotificationApi) {
           appendMenuBtn(`${strings.panel.sysNotify}${sysNotifyOn ? ' ✓' : ' ✕'}`, () => {
             const turningOn = !sysNotifyOn
+            const request = ++permissionRequest
             const commit = (granted: boolean) => {
+              if (disposed || request !== permissionRequest) return
               sysNotifyOn = turningOn && granted
               try {
                 localStorage.setItem(SYS_NOTIFY_KEY, sysNotifyOn ? '1' : '0')
@@ -1254,7 +1428,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
             }
             // 只在用户主动打开时才申请权限，不在挂载时骚扰
             if (turningOn && Notification.permission === 'default') {
-              void Notification.requestPermission().then((p) => commit(p === 'granted'))
+              void Notification.requestPermission().then((p) => commit(p === 'granted'), () => commit(false))
               return
             }
             commit(Notification.permission === 'granted')
@@ -1338,7 +1512,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
   let avoidCooldownUntil = 0
   let avoidTimer: number | undefined
   const cancelAvoid = () => {
-    window.clearTimeout(avoidTimer)
+    cancelLater(avoidTimer)
     avoidTimer = undefined
     root.style.transition = ''
   }
@@ -1358,7 +1532,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
       return
     }
     if (avoidTimer !== undefined) return
-    avoidTimer = window.setTimeout(() => {
+    avoidTimer = later(() => {
       avoidTimer = undefined
       if (root.classList.contains('hidden') || dragging || menu.classList.contains('open') || visualState !== 'idle') return
       if (performance.now() < avoidCooldownUntil) return
@@ -1375,7 +1549,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
       root.style.transition = 'left .35s ease, top .35s ease'
       root.style.left = `${next.x}px`
       root.style.top = `${next.y}px`
-      window.setTimeout(() => {
+      later(() => {
         root.style.transition = ''
         savePos()
       }, 380)
@@ -1383,10 +1557,180 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     }, AVOID_DWELL_MS)
   }
 
+  // ===== 摸头 =====
+  // 不按键、光标在头顶来回蹭就算摸。每掉一次头算一下，蹭到第二下它才眯眼，
+  // 免得鼠标只是路过头顶也被当成摸。
+  /** 两次掉头之间至少要走这么远，手抖不算 */
+  const PAT_MIN_TRAVEL = 8
+  /** 停手这么久就算摸完了 */
+  const PAT_IDLE_MS = 650
+  /** 每蹭这么多下冒一颗爱心 */
+  const PAT_HEART_EVERY = 5
+  const PAT_SAY_COOLDOWN_MS = 4000
+  /** 这么多下蹭在 PAT_TOO_FAST_MS 以内就是乱蹭：生气、游开 */
+  const PAT_TOO_FAST_STROKES = 8
+  const PAT_TOO_FAST_MS = 1100
+  /** 生气后这段时间里再蹭也不理 */
+  const PAT_GRUMPY_MS = 5000
+  const PAT_FLEE_STEP = 160
+  let patStrokes = 0
+  let patStrokeTimes: number[] = []
+  let patBlockedUntil = 0
+  let patLastY = 0
+  let patDir = 0
+  let patTurnX = 0
+  let patLastX = 0
+  let patEndTimer = 0
+  let patSaidAt = -Infinity
+  const inHeadZone = (x: number, y: number) => {
+    const r = pet.getBoundingClientRect()
+    if (r.width === 0) return false
+    const fx = (x - r.left) / r.width
+    const fy = (y - r.top) / r.height
+    // SVG 默认朝左，头在左半边；朝右时整只镜像
+    const head = swimmer.currentFacing === 'left' ? fx >= 0.05 && fx <= 0.6 : fx >= 0.4 && fx <= 0.95
+    return head && fy >= 0 && fy <= 0.45
+  }
+  const patTimers = new Set<number>()
+  const endPat = () => {
+    for (const id of patTimers) cancelLater(id)
+    patTimers.clear()
+    cancelLater(patEndTimer)
+    patEndTimer = 0
+    patStrokes = 0
+    patStrokeTimes = []
+    patDir = 0
+    pet.classList.remove('petting', 'pat-press')
+    root.classList.remove('patting')
+  }
+  const pressHead = () => {
+    pet.classList.remove('pat-press')
+    void pet.offsetWidth
+    pet.classList.add('pat-press')
+  }
+  const popHeart = () => {
+    const heart = pet.querySelector<HTMLElement>('.pat-heart')
+    if (heart === null) return
+    heart.classList.remove('show')
+    void heart.offsetWidth
+    heart.classList.add('show')
+  }
+  /** 摸满一轮：冒爱心、说句话、算一次互动；失落时这一摸就是安慰 */
+  const patReward = () => {
+    popHeart()
+    if (visualState === 'disappointed' && driver.soothe()) {
+      onSnapshot()
+      triggerComfort()
+      return
+    }
+    recordInteraction()
+    const now = performance.now()
+    if (now - patSaidAt < PAT_SAY_COOLDOWN_MS) return
+    patSaidAt = now
+    sounds.play('bubble')
+    showDialog(pick(strings.feedback.patted))
+  }
+  /** 乱蹭：吊眉、放狠话，朝远离光标的方向游开一段 */
+  const patTooFast = () => {
+    endPat()
+    const now = performance.now()
+    patBlockedUntil = now + PAT_GRUMPY_MS
+    avoidCooldownUntil = now + PAT_GRUMPY_MS
+    recordInteraction()
+    clearSulk()
+    sulking = true
+    pet.classList.remove('annoyed', 'squish', 'dizzy', 'joy')
+    pet.classList.add('sulking')
+    sounds.play('bubble')
+    showDialog(pick(strings.feedback.patTooFast))
+    sulkTimer = later(() => {
+      sulkTimer = 0
+      clearSulk()
+    }, 2600)
+    swimmer.interrupt()
+    const r = pet.getBoundingClientRect()
+    const cx = r.left + r.width / 2
+    const cy = r.top + r.height / 2
+    const dx = cx - patLastX
+    const dy = cy - patLastY
+    const len = Math.hypot(dx, dy) || 1
+    const next = clampPos(cx + (dx / len) * PAT_FLEE_STEP - PET_W() / 2, cy + (dy / len) * PAT_FLEE_STEP - PET_H() / 2)
+    root.style.transition = 'left .6s cubic-bezier(.2,.8,.3,1), top .6s cubic-bezier(.2,.8,.3,1)'
+    root.style.left = `${next.x}px`
+    root.style.top = `${next.y}px`
+    swimmer.spawnSplash(cx, r.top + r.height * 0.79, 4)
+    later(() => {
+      root.style.transition = ''
+      savePos()
+    }, 650)
+  }
+  const onPatStroke = () => {
+    markActive()
+    const now = performance.now()
+    patStrokeTimes.push(now)
+    if (patStrokeTimes.length > PAT_TOO_FAST_STROKES) patStrokeTimes.shift()
+    if (patStrokeTimes.length === PAT_TOO_FAST_STROKES && now - patStrokeTimes[0] < PAT_TOO_FAST_MS) {
+      patTooFast()
+      return
+    }
+    patStrokes += 1
+    if (patStrokes >= 2) {
+      if (!pet.classList.contains('petting')) {
+        swimmer.interrupt()
+        cancelAvoid()
+        pet.classList.add('petting')
+        root.classList.add('patting')
+      }
+      pressHead()
+    }
+    if (patStrokes % PAT_HEART_EVERY === 0) patReward()
+  }
+  const maybePat = (e: MouseEvent) => {
+    if (e.buttons !== 0 || dragging || menu.classList.contains('open') || root.classList.contains('hidden') || visualState === 'error' || performance.now() < patBlockedUntil) {
+      if (patStrokes > 0) endPat()
+      return
+    }
+    if (!inHeadZone(e.clientX, e.clientY)) {
+      if (patStrokes > 0 || patDir !== 0) endPat()
+      return
+    }
+    const prevX = patLastX
+    patLastX = e.clientX
+    patLastY = e.clientY
+    const dx = e.clientX - prevX
+    if (dx === 0) return
+    const dir = dx > 0 ? 1 : -1
+    if (patDir === 0) {
+      patDir = dir
+      patTurnX = prevX
+    } else if (dir !== patDir) {
+      // 掉头点是上一个位置：这一段从上次掉头走到这里，够远才算蹭了一下
+      if (Math.abs(prevX - patTurnX) >= PAT_MIN_TRAVEL) onPatStroke()
+      patDir = dir
+      patTurnX = prevX
+    }
+    cancelLater(patEndTimer)
+    patEndTimer = later(endPat, PAT_IDLE_MS)
+  }
+  /** 菜单「摸摸头」和长按：没有鼠标轨迹，就替你摸三下 */
+  const triggerPat = () => {
+    if (root.classList.contains('hidden') || visualState === 'error' || performance.now() < patBlockedUntil) return
+    endPat()
+    swimmer.interrupt()
+    pet.classList.add('petting')
+    root.classList.add('patting')
+    ;[0, 280, 560].forEach((ms) => patTimers.add(later(pressHead, ms)))
+    patTimers.add(later(() => {
+      patSaidAt = -Infinity
+      patReward()
+    }, 560))
+    patEndTimer = later(endPat, 1500)
+  }
+
   // ===== idle 随机小动作 =====
   let idleMicroTimer: number | undefined
   const clearIdleMicro = () => {
-    window.clearTimeout(idleMicroTimer)
+    cancelLater(idleMicroTimer)
     idleMicroTimer = undefined
   }
   const microLook = () => {
@@ -1396,14 +1740,14 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     const dy = Math.random() * 0.3 - 0.15
     pupil.style.transition = 'transform .45s ease'
     pupil.style.transform = `translate(${dx}px, ${dy}px)`
-    window.setTimeout(() => {
+    later(() => {
       pupil.style.transition = ''
       pupil.style.transform = ''
     }, 1500)
   }
   const microBubbles = () => {
     popBubble()
-    window.setTimeout(popBubble, 260)
+    later(popBubble, 260)
   }
   /** microSwim 的补间时长，也是"坐标不可信"的窗口 */
   const MICRO_SWIM_MS = 1450
@@ -1417,7 +1761,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     root.style.top = `${target.y}px`
     // 补间期间 style.left 已是终点、鲸鱼还在半路，这段时间内谁读坐标都会读偏
     microSwimUntil = Date.now() + MICRO_SWIM_MS
-    window.setTimeout(() => {
+    later(() => {
       root.style.transition = ''
       microSwimUntil = 0
       savePos()
@@ -1473,7 +1817,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
 
   const scheduleIdleMicro = () => {
     clearIdleMicro()
-    idleMicroTimer = window.setTimeout(() => {
+    idleMicroTimer = later(() => {
       // 睡着/闹脾气时不做原地动作（打瞌睡只是根上的 class，visualState 仍是 idle，所以这里必须单独看 sleeping）
       if (visualState !== 'idle' || sleeping || sulking || root.classList.contains('hidden') || dragging || document.hidden || menu.classList.contains('open')) {
         scheduleIdleMicro()
@@ -1518,6 +1862,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     shakenUntil = now + SHAKEN_MS + SHAKE_COOLDOWN_MS
     markActive()
     recordInteraction()
+    clearReaction()
     pet.classList.remove('shaken', 'dizzy', 'squish', 'joy', 'annoyed')
     void pet.offsetWidth
     pet.classList.add('shaken')
@@ -1525,7 +1870,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     showDialog(pick(strings.feedback.shaken))
     // 后遗症：接下来一段时间游不直
     swimmer.setWoozy(SHAKEN_MS + WOOZY_MS)
-    window.setTimeout(() => pet.classList.remove('shaken'), SHAKEN_MS)
+    expireClass(pet, 'shaken', SHAKEN_MS)
   }
   /** 双击的专属反应：翻肚皮。翻着的时候不接别的动作，让这两秒完整演完 */
   let bellyUpUntil = 0
@@ -1538,16 +1883,17 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     // 双击必然先来两次单击，连戳计数已经涨了；翻肚皮是亲昵不是骚扰，清掉
     pokeStreak = 0
     if (pokeDecayTimer !== 0) {
-      window.clearTimeout(pokeDecayTimer)
+      cancelLater(pokeDecayTimer)
       pokeDecayTimer = 0
     }
     if (sulking) clearSulk()
+    clearReaction()
     pet.classList.remove('squish', 'dizzy', 'joy', 'annoyed', 'shaken')
     void pet.offsetWidth
     pet.classList.add('belly-up')
     sounds.play('trick')
     showDialog(pick(strings.feedback.bellyUp))
-    window.setTimeout(() => pet.classList.remove('belly-up'), BELLY_UP_MS)
+    expireClass(pet, 'belly-up', BELLY_UP_MS)
   }
 
   const trackShake = (x: number) => {
@@ -1579,17 +1925,20 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     if (shakeCount >= SHAKE_REVERSALS) triggerShaken()
   }
 
-  let dragStart: { x: number; y: number; ox: number; oy: number } | null = null
+  let dragStart: { pointerId: number; x: number; y: number; ox: number; oy: number } | null = null
   let longPressTimer: number | undefined
   let longPressTriggered = false
   const onPetPointerDown = (e: PointerEvent) => {
-    if (e.button !== 0) return
+    if (disposed || e.button !== 0 || e.isPrimary === false || dragStart !== null) return
+    suppressClick = false
+    endPat()
     // 抓住/开始拖拽：立即停下避让动作与游动，并冷却一段时间，想抓就能抓住
     cancelAvoid()
     swimmer.interrupt()
     avoidCooldownUntil = performance.now() + AVOID_COOLDOWN_MS
     markActive()
     dragStart = {
+      pointerId: e.pointerId,
       x: e.clientX,
       y: e.clientY,
       ox: parseFloat(root.style.left) || 0,
@@ -1600,15 +1949,13 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     shakeWindowFrom = performance.now()
     // 严格保持抓取时的朝向，拖拽过程中不发生任何朝向突变
     root.dataset.facing = swimmer.currentFacing
-    pet.setPointerCapture(e.pointerId)
+    try { pet.setPointerCapture(e.pointerId) } catch { /* window 事件兜底 */ }
       longPressTriggered = false
-      window.clearTimeout(longPressTimer)
-      longPressTimer = window.setTimeout(() => {
+      cancelLater(longPressTimer)
+      longPressTimer = later(() => {
         longPressTriggered = true
         suppressClick = true
-        triggerSquish()
-        showDialog(strings.feedback.headpat)
-        sounds.play('bubble')
+        triggerPat()
       }, 700)
   }
   /**
@@ -1618,28 +1965,40 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
   let squeezeSaidAt = 0
   const updateEdge = (x: number, y: number) => {
     const maxX = Math.max(0, window.innerWidth - PET_W())
+    const maxY = Math.max(0, window.innerHeight - PET_H())
     const onLeft = x <= EDGE_SLACK
-    const onRight = x >= maxX - EDGE_SLACK
+    const onRight = !onLeft && x >= maxX - EDGE_SLACK
+    // 角落里只按左右算，两个方向一起压会拧成麻花
+    const sideways = onLeft || onRight
+    const onTop = !sideways && y <= EDGE_SLACK
+    const onBottom = !sideways && y >= maxY - EDGE_SLACK
     root.classList.toggle('edge-left', onLeft)
     root.classList.toggle('edge-right', onRight)
-    if (!onLeft && !onRight) return
+    root.classList.toggle('edge-top', onTop)
+    root.classList.toggle('edge-bottom', onBottom)
+    if (!sideways && !onTop && !onBottom) return
     const now = performance.now()
     if (now - squeezeSaidAt < 4000) return
     squeezeSaidAt = now
-    showDialog(pick(strings.feedback.squeezed))
-    swimmer.spawnDrip(x + (onLeft ? PET_W() * 0.18 : PET_W() * 0.82), y + PET_H() * 0.87)
+    if (sideways) {
+      showDialog(pick(strings.feedback.squeezed))
+      swimmer.spawnDrip(x + (onLeft ? PET_W() * 0.18 : PET_W() * 0.82), y + PET_H() * 0.87)
+    } else {
+      showDialog(pick(onTop ? strings.feedback.squashedTop : strings.feedback.squashedBottom))
+      swimmer.spawnDrip(x + PET_W() * (Math.random() < 0.5 ? 0.25 : 0.75), y + PET_H() * 0.87)
+    }
   }
   const clearEdge = () => {
-    root.classList.remove('edge-left', 'edge-right')
+    root.classList.remove('edge-left', 'edge-right', 'edge-top', 'edge-bottom')
   }
 
   /** 拖着不放又不动：三秒后开始扭 */
   let dragIdleTimer = 0
   /** fresh=true 表示这是人动了手才重排的，扭动该停；续问时不能清，否则刚扭就被抹掉 */
   const armDragIdle = (fresh = true) => {
-    if (dragIdleTimer !== 0) window.clearTimeout(dragIdleTimer)
+    if (dragIdleTimer !== 0) cancelLater(dragIdleTimer)
     if (fresh) pet.classList.remove('impatient')
-    dragIdleTimer = window.setTimeout(() => {
+    dragIdleTimer = later(() => {
       if (!dragging) return
       pet.classList.add('impatient')
       showDialog(pick(strings.feedback.dragIdle))
@@ -1649,7 +2008,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
   }
   const disarmDragIdle = () => {
     if (dragIdleTimer !== 0) {
-      window.clearTimeout(dragIdleTimer)
+      cancelLater(dragIdleTimer)
       dragIdleTimer = 0
     }
     pet.classList.remove('impatient')
@@ -1657,14 +2016,15 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
 
   let lastDripTime = 0
   const onPetPointerMove = (e: PointerEvent) => {
-    if (dragStart === null) return
+    if (dragStart === null || e.pointerId !== dragStart.pointerId) return
     const dx = e.clientX - dragStart.x
     const dy = e.clientY - dragStart.y
     if (!dragging && Math.abs(dx) + Math.abs(dy) > 4) {
+      endPat()
       dragging = true
       suppressClick = true
       root.classList.add('dragging')
-      window.clearTimeout(longPressTimer)
+      cancelLater(longPressTimer)
       armDragIdle()
     }
     if (dragging) {
@@ -1684,9 +2044,11 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
       }
     }
   }
-  const endDrag = () => {
-    if (dragStart === null) return
+  const endDrag = (e?: PointerEvent) => {
+    if (dragStart === null || (e && e.pointerId !== dragStart.pointerId)) return
+    const id = dragStart.pointerId
     dragStart = null
+    try { pet.releasePointerCapture(id) } catch { /* 指针已被浏览器释放 */ }
     resetShake()
     disarmDragIdle()
     clearEdge()
@@ -1702,33 +2064,29 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
       root.dataset.facing = swimmer.currentFacing
       pet.style.transform = `scaleX(${swimmer.currentFacing === 'left' ? 1 : -1}) rotate(0deg)`
     }
-    window.clearTimeout(longPressTimer)
-    if (longPressTriggered) {
-      longPressTriggered = false
-      window.setTimeout(() => {
-        suppressClick = false
-      }, 300)
-    } else {
-      window.setTimeout(() => {
-        suppressClick = false
-      }, 0)
+    cancelLater(longPressTimer)
+    if (!e || e.type !== 'pointerup') {
+      suppressClick = true
+      endPat()
     }
+    longPressTriggered = false
+    // 下一次 pointerdown 重置；浏览器延迟合成的 click 仍应被吞掉。
   }
 
 // ===== 打瞌睡 =====
   let sleepTimer: number | undefined
   let sleeping = false
   const markActive = () => {
-    window.clearTimeout(sleepTimer)
+    cancelLater(sleepTimer)
     if (sleeping) {
       sleeping = false
       root.classList.remove('sleeping')
       pet.classList.add('spouting')
-      window.setTimeout(() => pet.classList.remove('spouting'), 1400)
+      expireClass(pet, 'spouting', 1400)
       showDialog(strings.feedback.wake)
       sounds.play('bubble')
     }
-    sleepTimer = window.setTimeout(() => {
+    sleepTimer = later(() => {
       if (visualState !== 'idle' || dragging) {
         markActive()
         return
@@ -1744,7 +2102,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
       sleeping = false
       root.classList.remove('sleeping')
       pet.classList.add('spouting')
-      window.setTimeout(() => pet.classList.remove('spouting'), 1400)
+      expireClass(pet, 'spouting', 1400)
     }
   }
 
@@ -1756,6 +2114,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     markActive()
     // 躲避判定自带守卫，且不能被下面追光的 rAF 节流挡掉，所以放在 early-return 之前
     maybeAvoid(e)
+    maybePat(e)
     if (eyeRaf !== 0) return
     const pupil = petPupil()
     if (pupil === null) return
@@ -1771,21 +2130,30 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
   }
 
   // ===== 事件绑定 =====
+  const copyError = async () => {
+    const text = lastErrorText
+    let copied = false
+    try {
+      if (navigator.clipboard !== undefined) {
+        await navigator.clipboard.writeText(text)
+        copied = true
+      }
+    } catch {
+      // 无权限或不安全上下文时给出失败反馈。
+    }
+    if (!disposed && text === lastErrorText) showDialog(copied ? strings.feedback.errorCopied : strings.feedback.errorCopyFailed)
+  }
   pet.addEventListener('click', () => {
-    if (suppressClick) return
+    if (disposed || suppressClick || performance.now() < bellyUpUntil) return
     // 错误状态下点击：复制错误信息
     if (visualState === 'error' && lastErrorText !== '') {
-      try {
-        void navigator.clipboard?.writeText(lastErrorText)
-      } catch {
-        // 忽略剪贴板失败
-      }
-      showDialog(strings.feedback.errorCopied)
+      void copyError()
       return
     }
 
     // 失落时的一戳是安慰，不该被随机三选一顶掉
     if (visualState === 'disappointed' && driver.soothe()) {
+      onSnapshot()
       triggerComfort()
       return
     }
@@ -1820,6 +2188,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
   // 双击按关系深浅分流：翻肚皮是"完全放松"的姿势，
   // 只有处到形影不离才给你看，平时还是翻个跟头
   pet.addEventListener('dblclick', () => {
+    if (disposed || suppressClick || performance.now() < bellyUpUntil || visualState === 'error') return
     if (currentTier() >= BOND_THRESHOLDS.length - 1) triggerBellyUp()
     else triggerRoll()
   })
@@ -1831,9 +2200,15 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     openMenu(e.clientX, e.clientY)
   })
   pet.addEventListener('pointerdown', onPetPointerDown)
-  pet.addEventListener('pointermove', onPetPointerMove)
-  pet.addEventListener('pointerup', endDrag)
-  pet.addEventListener('pointercancel', endDrag)
+  pet.addEventListener('lostpointercapture', endDrag)
+  window.addEventListener('pointermove', onPetPointerMove)
+  window.addEventListener('pointerup', endDrag)
+  window.addEventListener('pointercancel', endDrag)
+  window.addEventListener('pointermove', onMiniPointerMove)
+  window.addEventListener('pointerup', onMiniDragEnd)
+  window.addEventListener('pointercancel', onMiniDragEnd)
+  const onBlur = () => { endDrag(); onMiniDragEnd(); endPat() }
+  window.addEventListener('blur', onBlur)
   document.addEventListener('pointerdown', onDocPointerDown)
   document.addEventListener('keydown', markActive)
   document.addEventListener('wheel', markActive, { passive: true })
@@ -1853,8 +2228,13 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
   let unsubChat: (() => void) | undefined
   let face: SessionFace | undefined
   let chat: ChatSnapshot | undefined
+  let boundSession: unknown
   let prevSessionId: string | undefined = undefined
   let isFirstSessionSync = true
+
+  // 0.1.7 的按会话状态；0.1.5 的 uiSession 没有 sessionStatus，这一整块自动不生效
+  const statusRaw = (ctx as unknown as { uiSession?: { sessionStatus?: SessionStatusSource } }).uiSession?.sessionStatus
+  const statusSource = typeof statusRaw?.getSnapshot === 'function' ? statusRaw : undefined
 
   /** 把两处订阅合成状态机需要的"最小快照面"。 */
   const composeSnapshot = (): WhaleSnapshot | undefined => {
@@ -1862,6 +2242,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     const session = face.getSnapshot()
     const legacy = chat?.legacy
     const partial = legacy?.partial ?? null
+    const status = prevSessionId === undefined ? undefined : statusSource?.getSnapshot().get(prevSessionId)
     return {
       running: session.running,
       partial,
@@ -1870,12 +2251,97 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
       lastAgentError: session.lastAgentError,
       openError: session.openError,
       turnEnds: legacy?.turnEnds,
-      // pending：0.1.5 的会话快照没有这个字段，也没有替代的公开读取面
-      //（审批 / 提问的数据只在 slot 的 carrier 上，见 state.ts 文件头）。
-      // 这里按老字段兜底读一次：宿主将来补上就自动生效，没有就是 undefined，
-      // 绝不因为字段缺失而抛错。
-      pending: (session as { pending?: readonly unknown[] }).pending,
+      // pending：0.1.7 从 uiSession.sessionStatus 的 pendingInteraction 来；
+      // 0.1.5 没有公开读取面（见 state.ts 文件头），按老字段兜底读，没有就是 undefined。
+      pending:
+        status?.pendingInteraction !== undefined
+          ? [status.pendingInteraction]
+          : (session as { pending?: readonly unknown[] }).pending,
     }
+  }
+
+  // ===== 跟随所有会话 =====
+  let followAll = true
+  try {
+    followAll = localStorage.getItem(FOLLOW_ALL_KEY) !== '0'
+  } catch {
+    // 忽略存储失败
+  }
+  let otherRunning = 0
+  let otherWaiting = 0
+  /** 别的会话的事，要在状态切换的那句台词之后再说，不然会被盖掉 */
+  let otherNews = ''
+  const prevOtherRunning = new Map<string, boolean>()
+  const prevOtherWaiting = new Map<string, boolean>()
+  let statusPrimed = false
+
+  const rowOf = (id: string): SessionRow | undefined =>
+    (sessions?.list.getSnapshot().byId as Readonly<Record<string, SessionRow | undefined>> | undefined)?.[id]
+
+  let badgeCount = 0
+  const updateBadge = () => {
+    const n = followAll ? otherRunning : 0
+    badge.hidden = n === 0
+    badge.textContent = n > 9 ? '9+' : String(n)
+    badge.title = n === 0 ? '' : strings.multi.badge(n)
+    // 数字变了就弹一下；先摘类再强制回流，连续变化也能重新播
+    if (n > 0 && n !== badgeCount) {
+      badge.classList.remove('pop')
+      void badge.offsetWidth
+      badge.classList.add('pop')
+    }
+    if (n > 0) startFollow()
+    badgeCount = n
+  }
+
+  const recountOthers = () => {
+    if (statusSource === undefined) return
+    const snapshot = statusSource.getSnapshot()
+    for (const id of prevOtherRunning.keys()) {
+      if (!snapshot.has(id) || rowOf(id)?.parentId !== undefined || rowOf(id)?.origin === 'subagent') {
+        prevOtherRunning.delete(id)
+        prevOtherWaiting.delete(id)
+      }
+    }
+    let running = 0
+    let waiting = 0
+    let done: string | undefined
+    let newlyWaiting: string | undefined
+    for (const [id, st] of snapshot) {
+      const row = rowOf(id)
+      // 子代理是当前会话自己派出去的活，不算"别的会话"
+      if (row?.parentId !== undefined || row?.origin === 'subagent') continue
+      if (id === prevSessionId) {
+        // 当前会话的边沿归状态机管；清掉旧记录，免得切走时拿过期的"在跑"误判成刚跑完
+        prevOtherRunning.delete(id)
+        prevOtherWaiting.delete(id)
+        continue
+      }
+      const isRunning = st.running === true
+      const isWaiting = st.pendingInteraction !== undefined
+      if (isRunning) running++
+      if (isWaiting) waiting++
+      if (statusPrimed && prevOtherRunning.get(id) === true && st.running === false) done ??= id
+      if (statusPrimed && isWaiting && prevOtherWaiting.get(id) !== true) newlyWaiting ??= id
+      prevOtherRunning.set(id, isRunning)
+      prevOtherWaiting.set(id, isWaiting)
+    }
+    statusPrimed = true
+    otherRunning = running
+    otherWaiting = waiting
+    updateBadge()
+    if (followAll) {
+      if (done !== undefined) {
+        driver.celebrateOther(performance.now())
+        otherNews = strings.multi.doneOther(rowOf(done)?.displayTitle ?? '')
+      } else if (newlyWaiting !== undefined) {
+        otherNews = strings.multi.waitingOther(rowOf(newlyWaiting)?.displayTitle ?? '')
+      }
+    }
+  }
+  const onStatus = () => {
+    recountOthers()
+    onSnapshot()
   }
 
   // 瞬态到点回落需要一个"没人推快照也要醒一次"的定时器。
@@ -1883,7 +2349,7 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
   let wakeTimer = 0
   const clearWake = () => {
     if (wakeTimer !== 0) {
-      window.clearTimeout(wakeTimer)
+      cancelLater(wakeTimer)
       wakeTimer = 0
     }
   }
@@ -1893,49 +2359,93 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     const at = driver.nextDeadline(now)
     if (at === null) return
     // +24ms 是给 performance.now / setTimeout 之间的粒度差留的余量，避免差一毫秒又睡一轮
-    wakeTimer = window.setTimeout(() => {
+    wakeTimer = later(() => {
       wakeTimer = 0
       onSnapshot()
     }, Math.max(16, at - now + 24))
   }
 
-  const onSnapshot = () => {
-    const snapObj = composeSnapshot()
-    if (snapObj === undefined) {
-      clearWake()
-      lastErrorText = ''
-      setState('idle', visualState !== 'idle')
-      updateTicker('')
+  /** 当前会话闲着时，别的会话的状态顶上来：有人等确认 > 有人在跑 */
+  const withOthers = (state: WhaleState): WhaleState => {
+    if (!followAll || state !== 'idle') return state
+    if (otherWaiting > 0) return 'wait'
+    if (otherRunning > 0) return 'working'
+    return state
+  }
+  // 并发播报：档位只升不降，一批活全部跑完（总数归零）才清零，免得人数在档内上下抖动时反复喊
+  let busyTier = 0
+  let peakRunning = 0
+  const trackConcurrency = (currentRunning: boolean) => {
+    if (!followAll || statusSource === undefined) {
+      busyTier = 0
+      peakRunning = 0
       return
     }
+    const total = otherRunning + (currentRunning ? 1 : 0)
+    const tier = total >= OVERTIME_AT ? 2 : total >= 2 ? 1 : 0
+    if (tier > busyTier) {
+      otherNews = pick(tier === 2 ? strings.multi.overtime(total) : strings.multi.parallel(total))
+      busyTier = tier
+    }
+    peakRunning = Math.max(peakRunning, total)
+    if (total === 0) {
+      // 真并发过才说收工的话；单个会话跑完还是平常的台词
+      if (peakRunning >= 2) otherNews = pick(strings.multi.allDone)
+      busyTier = 0
+      peakRunning = 0
+    }
+  }
+
+  let lastShown: WhaleState | null = null
+  const announceOtherNews = () => {
+    if (otherNews === '') return
+    showDialog(otherNews)
+    otherNews = ''
+  }
+
+  const onSnapshot = () => {
+    if (disposed) return
+    const snapObj = composeSnapshot() ?? { running: false, lastAgentError: null, openError: null }
     lastErrorText = snapObj.lastAgentError ?? (snapObj.openError != null ? 'open-error' : '')
+    trackConcurrency(snapObj.running)
     const step = driver.step(snapObj, performance.now())
-    setState(step.state, step.changed)
+    const shown = withOthers(step.state)
+    // 首帧（lastShown 为 null）跟 prime 一样不算变化，不冒台词不出声
+    setState(shown, lastShown !== null && shown !== lastShown)
+    lastShown = shown
+    announceOtherNews()
     // 只有开关打开且真实状态是 think 时展示思考流；假装工作模式不展示
     updateTicker(tickerOn && step.state === 'think' ? partialTextOf(snapObj.partial) : '')
     scheduleWake()
   }
   const syncSession = () => {
+    const id = currentSessionId(sessions.list.getSnapshot())
+    const binding = id === undefined ? undefined : sessions.binding(id as Parameters<ISessions['binding']>[0])
+    // 0.1.7 的会话列表会因为别的会话的元数据频繁发布；当前会话和它的绑定都没变就不重订
+    if (disposed) return
+    if (!isFirstSessionSync && id === prevSessionId && binding === boundSession) {
+      recountOthers()
+      onSnapshot()
+      return
+    }
     unsubSession?.()
     unsubChat?.()
     unsubSession = undefined
     unsubChat = undefined
     face = undefined
     chat = undefined
-    const list = sessions.list.getSnapshot()
-    const id = list.current
+    boundSession = binding
     if (id !== undefined && id !== prevSessionId && !isFirstSessionSync) {
       triggerWelcome()
     }
+    const switched = id !== prevSessionId
+    if (switched && !isFirstSessionSync) driver.reset()
     prevSessionId = id
     isFirstSessionSync = false
+    // 当前会话换了，"别的会话"的名单也跟着变，重新数一遍
+    if (switched) recountOthers()
 
-    if (id === undefined) {
-      onSnapshot()
-      return
-    }
-    const binding = sessions.binding(id)
-    if (binding === undefined) {
+    if (id === undefined || binding === undefined) {
       onSnapshot()
       return
     }
@@ -1946,11 +2456,11 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     // 契约上 target() 的第一次订阅会激活该 view。
     try {
       const target = uiConversation.binding(binding).target('chat')
-      chat = target.getSnapshot()
       unsubChat = target.subscribe(() => {
         chat = target.getSnapshot()
         onSnapshot()
       })
+      chat = target.getSnapshot()
     } catch {
       // 拿不到 chat 投影就退化成"没有工具/文本信号"：鲸鱼仍能 think / idle / celebrate，
       // 只是工具调用期间不切 working。绝不能让它把 apply 打断，那会整只鲸鱼消失。
@@ -1959,9 +2469,12 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     onSnapshot()
   }
 
+  let unsubStatus: (() => void) | undefined
   if (sessions !== undefined) {
     unsubList = sessions.list.subscribe(syncSession)
     syncSession()
+    unsubStatus = statusSource?.subscribe(onStatus)
+    onStatus()
   }
 
   markActive()
@@ -2021,17 +2534,45 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
   checkBondUp()
 
   const dispose = () => {
-    window.clearTimeout(sleepTimer)
+    if (disposed) return
+    disposed = true
+    endDrag()
+    onMiniDragEnd()
+    endPat()
+    for (const id of timers) window.clearTimeout(id)
+    timers.clear()
+    classTimers.clear()
+    removalObserver.disconnect()
+    if (owner.__petWhaleDispose === dispose) delete owner.__petWhaleDispose
+    const api = document as Document & Record<string, unknown>
+    delete api.__petWhalePets
+    delete api.__petWhaleActivePet
+    delete api.__petWhaleSetPet
+    pet.removeEventListener('pointerdown', onPetPointerDown)
+    pet.removeEventListener('lostpointercapture', endDrag)
+    window.removeEventListener('pointermove', onPetPointerMove)
+    window.removeEventListener('pointerup', endDrag)
+    window.removeEventListener('pointercancel', endDrag)
+    window.removeEventListener('pointermove', onMiniPointerMove)
+    window.removeEventListener('pointerup', onMiniDragEnd)
+    window.removeEventListener('pointercancel', onMiniDragEnd)
+    window.removeEventListener('blur', onBlur)
+    cancelLater(sleepTimer)
     window.clearTimeout(microActionTimer)
     if (sedentaryTimer !== 0) window.clearInterval(sedentaryTimer)
     window.clearInterval(chatterTimer)
-    if (dragIdleTimer !== 0) window.clearTimeout(dragIdleTimer)
+    if (dragIdleTimer !== 0) cancelLater(dragIdleTimer)
     restoreTitle()
-    if (pokeDecayTimer !== 0) window.clearTimeout(pokeDecayTimer)
-    if (sulkTimer !== 0) window.clearTimeout(sulkTimer)
-    window.clearTimeout(dialogTimer)
+    for (const notification of notifications) {
+      try { notification.close() } catch { /* 通知服务已失效时继续清理其他资源。 */ }
+    }
+    notifications.clear()
+    if (pokeDecayTimer !== 0) cancelLater(pokeDecayTimer)
+    if (sulkTimer !== 0) cancelLater(sulkTimer)
+    cancelLater(dialogTimer)
     if (eyeRaf !== 0) window.cancelAnimationFrame(eyeRaf)
     unsubList?.()
+    unsubStatus?.()
     unsubSession?.()
     unsubChat?.()
     clearWake()
@@ -2041,10 +2582,15 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     window.removeEventListener('mousemove', onMouseMove)
     window.removeEventListener('resize', onResize)
     document.removeEventListener('visibilitychange', onVisibility)
+    document.removeEventListener('visibilitychange', onFollowVisibility)
+    if (followRaf !== 0) window.cancelAnimationFrame(followRaf)
     themeObserver.disconnect()
     clearIdleMicro()
     cancelAvoid()
     swimmer.dispose()
+    sounds.dispose()
+    localeUnsub?.()
+    cancelLater(patEndTimer)
     if (autoHideTimer !== undefined) window.clearInterval(autoHideTimer)
     hideTicker()
     ticker.remove()
@@ -2053,6 +2599,27 @@ appendMenuBtn(`${strings.panel.sound}${sounds.isMuted ? ' ✕' : ' ✓'}`, () =>
     style.remove()
     petStyle.remove()
   }
+  const removalObserver = new MutationObserver(() => { if (!root.isConnected) dispose() })
+  removalObserver.observe(document.body, { childList: true })
+  owner.__petWhaleDispose = dispose
+
+  // ===== 多宠物对外接口（fork 扩展）=====
+  // 薄预览页（上游 1.2.3+ 的 preview.html）只加载 lib/client.js，拿不到模块内部；
+  // 这里挂三个只读/切换用的小接口，页面据此列出宠物并切换。DSH 本体不需要它们。
+  const petApi = document as Document & {
+    __petWhalePets?: Array<{ id: string; zh: string; en: string; icon: string }>
+    __petWhaleActivePet?: () => string
+    __petWhaleSetPet?: (id: string) => string
+  }
+  petApi.__petWhalePets = PETS.map((p) => ({ id: p.id, zh: p.name.zh, en: p.name.en, icon: p.icon }))
+  petApi.__petWhaleActivePet = () => activePet.id
+  petApi.__petWhaleSetPet = (id: string) => {
+    const next = petOf(id)
+    applyPet(next.id)
+    syncMiniState(visualState) // 隐藏状态下切宠物，小按钮的图标/文案也要跟着换
+    return next.id
+  }
   quitWhale = dispose
+  onVisibility()
   return dispose
 }

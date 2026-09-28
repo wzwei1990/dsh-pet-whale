@@ -123,6 +123,7 @@ const pet = rootEl?.querySelector('.pet-official')
 check('鲸鱼本体存在', pet !== null)
 check('初始 idle 类', pet?.classList.contains('idle') === true)
 check('SVG 有官方路径', (rootEl?.innerHTML.match(/M22\.9168/g) ?? []).length > 0)
+check('有庆祝笑眼、失落八字眉和眼泪', ['.happy-eyes', '.sad-eyes', '.tear'].every((s) => rootEl?.querySelector(s) !== null))
 const shadow = rootEl?.querySelector(':scope > .dsh-whale-shadow')
 check('影子是容器兄弟元素（不随鲸鱼旋转）', shadow !== null)
 check('影子不在鲸鱼内部', pet?.querySelector('.dsh-whale-shadow') === null)
@@ -384,6 +385,51 @@ check(
   rootEl?.classList.contains('edge-left') === false && rootEl?.classList.contains('edge-right') === false,
 )
 
+// 上下边：按到顶 / 底 → 上下压扁；角落只算左右
+const ptrXY = (type, x, y) =>
+  new window.MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y })
+rootEl.style.left = '400px'
+rootEl.style.top = '300px'
+pet.dispatchEvent(Object.assign(ptrXY('pointerdown', 300, 300), { pointerId: 5 }))
+pet.dispatchEvent(Object.assign(ptrXY('pointermove', 300, -2000), { pointerId: 5 }))
+check('贴顶边上下压扁', rootEl?.classList.contains('edge-top') === true)
+pet.dispatchEvent(Object.assign(ptrXY('pointermove', 300, 5000), { pointerId: 5 }))
+check('贴底边上下压扁', rootEl?.classList.contains('edge-bottom') === true && rootEl?.classList.contains('edge-top') === false)
+pet.dispatchEvent(Object.assign(ptrXY('pointermove', -2000, 5000), { pointerId: 5 }))
+check('左下角只按左边算', rootEl?.classList.contains('edge-left') === true && rootEl?.classList.contains('edge-bottom') === false)
+pet.dispatchEvent(Object.assign(ptrXY('pointerup', -2000, 5000), { pointerId: 5 }))
+check('松手清掉上下边缘态', !rootEl?.classList.contains('edge-top') && !rootEl?.classList.contains('edge-bottom'))
+
+// 摸头：不按键在头顶来回蹭。jsdom 没有布局，给鲸鱼一个假的盒子
+pet.getBoundingClientRect = () => ({ left: 0, top: 0, width: 137, height: 101, right: 137, bottom: 101, x: 0, y: 0 })
+const hover = (x, y) => window.dispatchEvent(new window.MouseEvent('mousemove', { clientX: x, clientY: y, buttons: 0 }))
+// 正常摸：一下隔 220ms，五下要将近一秒，不算乱蹭
+const stroke = async (x) => { hover(x, 20); await new Promise((r) => setTimeout(r, 220)) }
+await stroke(20)
+await stroke(50)
+await stroke(20)
+check('蹭一下只是路过，不算摸', !pet.classList.contains('petting'))
+await stroke(50)
+check('蹭第二下开始眯眼', pet.classList.contains('petting') && rootEl.classList.contains('patting'))
+await stroke(20); await stroke(50); await stroke(20)
+check('蹭满五下冒爱心', rootEl.querySelector('.pat-heart')?.classList.contains('show') === true)
+check('被摸说了话', /摸|舒服|暖/.test(dialog?.textContent ?? ''))
+hover(120, 90)
+check('光标离开头顶就不算摸了', !pet.classList.contains('petting'))
+hover(20, 20); hover(50, 20); hover(20, 20); hover(50, 20)
+await new Promise((r) => setTimeout(r, 800))
+check('停手一会儿自己收起', !pet.classList.contains('petting'))
+// 乱蹭：一口气来回好几下 → 生气、放话、游开，之后一阵子不给摸
+rootEl.style.left = '400px'
+rootEl.style.top = '300px'
+for (const x of [20, 50, 20, 50, 20, 50, 20, 50, 20, 50, 20]) hover(x, 20)
+check('蹭太快会生气', pet.classList.contains('sulking') && !pet.classList.contains('petting'))
+check('生气放话', /秃|冒烟|游远/.test(dialog?.textContent ?? ''))
+check('生气后游开', rootEl.style.left !== '400px' || rootEl.style.top !== '300px')
+for (const x of [20, 50, 20, 50]) hover(x, 20)
+check('生气期间再蹭也不理', !pet.classList.contains('petting'))
+delete pet.getBoundingClientRect
+
 // 拖着不放又不动：三秒后开始不耐烦。这条只能真等，没有假时钟
 pet.dispatchEvent(Object.assign(ptr('pointerdown', 300), { pointerId: 4 }))
 pet.dispatchEvent(Object.assign(ptr('pointermove', 340), { pointerId: 4 }))
@@ -511,6 +557,173 @@ openAppearance4()
 clickMenu4('小鲸鱼')
 check('切回鲸鱼：竖版容器变量被清掉', rootEl4?.style.getPropertyValue('--pw-pet-w') === '')
 dispose4()
+
+// ===== 0.1.7 形状：列表没有 current，主视图靠 retainedBy.mainView 认；uiSession.sessionStatus 按会话给状态 =====
+{
+  const rows = {
+    a: { id: 'a', displayTitle: '会话A', running: false, retainedBy: { mainView: 1 } },
+    b: { id: 'b', displayTitle: '会话B', running: false, retainedBy: {} },
+    k: { id: 'k', displayTitle: '子代理', running: false, parentId: 'a', origin: 'subagent', retainedBy: {} },
+    c: { id: 'c', displayTitle: '会话C', running: false, retainedBy: {} },
+    d: { id: 'd', displayTitle: '会话D', running: false, retainedBy: {} },
+  }
+  const list17 = makeObservable(() => ({ ids: ['a', 'b'], byId: rows, phase: 'ready', projectionsBySession: {} }))
+  const snapA = { sessionId: 'a', running: false, lastAgentError: null, openError: null }
+  const faceA = makeObservable(() => snapA)
+  const faceB = makeObservable(() => ({ sessionId: 'b', running: false, lastAgentError: null, openError: null }))
+  const status = new Map([
+    ['a', { running: false, pendingInteraction: undefined, completionUnread: false }],
+    ['b', { running: false, pendingInteraction: undefined, completionUnread: false }],
+    ['k', { running: false, pendingInteraction: undefined, completionUnread: false }],
+    ['c', { running: false, pendingInteraction: undefined, completionUnread: false }],
+    ['d', { running: false, pendingInteraction: undefined, completionUnread: false }],
+  ])
+  const statusObs = makeObservable(() => status)
+  const ctx17 = {
+    sessions: {
+      list: list17,
+      binding: (id) =>
+        id === 'a' ? { sessionId: 'a', session: faceA } : id === 'b' ? { sessionId: 'b', session: faceB } : undefined,
+    },
+    uiConversation: { binding: () => ({ target: () => makeObservable(() => ({ legacy: { turnEnds: new Map(), partial: null, runningCalls: [] } })) }) },
+    uiSession: { sessionStatus: statusObs },
+  }
+  window.localStorage.removeItem('pet-whale:follow-all')
+  window.localStorage.setItem('pet-whale:muted', '0')
+  window.localStorage.setItem('pet-whale:volume', 'mid')
+  const dispose3 = exports_.apply(ctx17)
+  const root3 = window.document.querySelector('[data-dsh-whale]')
+  const pet3 = root3?.querySelector('.pet-official')
+  const badge3 = root3?.querySelector('.dsh-whale-badge')
+  const dialog3 = root3?.querySelector('.dsh-whale-dialog')
+  const cls3 = () => [...(pet3?.classList ?? [])].filter((c) => ['idle', 'think', 'working', 'celebrate', 'error', 'wait'].includes(c)).join(',')
+  check('0.1.7 列表无 current 也能认出当前会话', cls3() === 'idle')
+
+  snapA.running = true
+  faceA.notify()
+  check('0.1.7 当前会话在跑 → think（不再永远 idle）', cls3() === 'think')
+  snapA.running = false
+  faceA.notify()
+  await new Promise((r) => setTimeout(r, 2700))
+
+  status.set('k', { running: true, pendingInteraction: undefined, completionUnread: false })
+  statusObs.notify()
+  check('子代理在跑不算别的会话', badge3?.hidden === true && cls3() === 'idle')
+
+  status.set('b', { running: true, pendingInteraction: undefined, completionUnread: false })
+  statusObs.notify()
+  check('别的会话在跑 → working', cls3() === 'working')
+  check('角标显示 1', badge3?.hidden === false && badge3?.textContent === '1')
+
+  // 角标跟随身体起伏：jsdom 没有布局，给身体桩一个正弦起伏的位置，看角标的 translate 跟着变
+  const body3 = pet3?.querySelector('.body')
+  const tFollow0 = Date.now()
+  body3.getBoundingClientRect = () => {
+    const y = 20 + 8 * Math.sin(((Date.now() - tFollow0) / 400) * Math.PI)
+    return { left: 10, top: y, width: 100, height: 60, right: 110, bottom: y + 60, x: 10, y }
+  }
+  const followYs = new Set()
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 60))
+    followYs.add((badge3?.style.translate ?? '').split(' ')[1] ?? '')
+  }
+  check('角标跟着身体起伏移动', followYs.size >= 4 && [...followYs].every((v) => /^-?\d+(\.\d+)?px$/.test(v)))
+  delete body3.getBoundingClientRect
+
+  status.set('b', { running: false, pendingInteraction: undefined, completionUnread: true })
+  statusObs.notify()
+  check('别的会话跑完 → celebrate', cls3() === 'celebrate')
+  check('跑完报出会话名', (dialog3?.textContent ?? '').includes('会话B'))
+  check('跑完角标收起', badge3?.hidden === true)
+  await new Promise((r) => setTimeout(r, 2700))
+  check('庆祝到点回落 idle', cls3() === 'idle')
+
+  // 并发播报：2 个 → 并发，4 个 → 加班，档内抖动不重喊，全部跑完 → 收工
+  const run = (id, on) => status.set(id, { running: on, pendingInteraction: undefined, completionUnread: false })
+  snapA.running = true
+  faceA.notify()
+  run('b', true)
+  statusObs.notify()
+  check('两个会话同时跑 → 并发台词', /并发/.test(dialog3?.textContent ?? ''))
+  run('c', true)
+  statusObs.notify()
+  check('三个仍在并发档，不重喊', !/加班/.test(dialog3?.textContent ?? ''))
+  run('d', true)
+  statusObs.notify()
+  check('四个会话 → 加班台词', /加班/.test(dialog3?.textContent ?? ''))
+  run('d', false)
+  statusObs.notify()
+  run('d', true)
+  statusObs.notify()
+  check('档内上下抖动不重复喊加班', !/加班/.test(dialog3?.textContent ?? '') || /跑完/.test(dialog3?.textContent ?? ''))
+  run('b', false)
+  run('c', false)
+  run('d', false)
+  statusObs.notify()
+  check('别的都跑完、当前还在跑 → 还没收工', !/全部搞定|全部收工/.test(dialog3?.textContent ?? ''))
+  snapA.running = false
+  faceA.notify()
+  check('最后一个跑完 → 收工台词', /全部搞定|全部收工/.test(dialog3?.textContent ?? ''))
+  check('收工时庆祝', cls3() === 'celebrate')
+  await new Promise((r) => setTimeout(r, 2700))
+  snapA.running = true
+  faceA.notify()
+  snapA.running = false
+  faceA.notify()
+  check('单个会话跑完不说收工', !/全部搞定|全部收工/.test(dialog3?.textContent ?? ''))
+  await new Promise((r) => setTimeout(r, 2700))
+
+  status.set('b', { running: true, pendingInteraction: { key: 'q1', kind: 'approval', sessionId: 'b' }, completionUnread: false })
+  statusObs.notify()
+  check('别的会话等确认 → wait', cls3() === 'wait')
+  check('等确认报出会话名', (dialog3?.textContent ?? '').includes('会话B'))
+
+  status.set('a', { running: true, pendingInteraction: { key: 'q2', kind: 'approval', sessionId: 'a' }, completionUnread: false })
+  status.set('b', { running: false, pendingInteraction: undefined, completionUnread: false })
+  snapA.running = true
+  faceA.notify()
+  statusObs.notify()
+  check('当前会话等确认 → wait（0.1.5 读不到的 pending）', cls3() === 'wait')
+  status.set('a', { running: true, pendingInteraction: undefined, completionUnread: false })
+  statusObs.notify()
+  snapA.running = false
+  faceA.notify()
+  await new Promise((r) => setTimeout(r, 2700))
+
+  // 关掉跟随：别的会话在跑也不管
+  const menu3 = root3?.querySelector('.dsh-whale-menu')
+  const clickBtn = (text) =>
+    [...(menu3?.querySelectorAll('button') ?? [])].find((b) => b.textContent.includes(text))
+      ?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+  pet3?.dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }))
+  clickBtn('更多设置')
+  clickBtn('行为')
+  clickBtn('跟随所有会话')
+  check('跟随开关已写入', window.localStorage.getItem('pet-whale:follow-all') === '0')
+  status.set('b', { running: true, pendingInteraction: undefined, completionUnread: false })
+  statusObs.notify()
+  check('关掉跟随后别的会话在跑仍 idle', cls3() === 'idle' && badge3?.hidden === true)
+
+  // 音量：静音 → 小 → 中 → 大 → 静音 循环（初值在挂载前写进存储）
+  const volumeLabel = () => [...(menu3?.querySelectorAll('button') ?? [])].find((b) => b.textContent.includes('音量'))?.textContent ?? ''
+  check('音量入口显示当前档', volumeLabel().includes('中'))
+  clickBtn('音量')
+  check('中 → 大', window.localStorage.getItem('pet-whale:volume') === 'high' && volumeLabel().includes('大'))
+  clickBtn('音量')
+  check('大 → 静音', window.localStorage.getItem('pet-whale:muted') === '1' && volumeLabel().includes('静音'))
+  clickBtn('音量')
+  check('静音 → 小', window.localStorage.getItem('pet-whale:muted') === '0' && window.localStorage.getItem('pet-whale:volume') === 'low')
+
+  // 当前会话在跑时切到一个闲着的会话：不能当成"跑完了"去庆祝（真机 0.1.7 上发现的）
+  snapA.running = true
+  faceA.notify()
+  check('切换前当前会话在跑', cls3() === 'think')
+  rows.a.retainedBy = {}
+  rows.b.retainedBy = { mainView: 1 }
+  list17.notify()
+  check('切到闲着的会话不误庆祝', cls3() === 'idle')
+  dispose3()
+}
 
 // dispose
 check('dispose 移除容器', window.document.querySelector('[data-dsh-whale]') === null)

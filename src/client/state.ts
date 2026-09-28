@@ -30,6 +30,8 @@
 //       （dsh-client-ui-approval / dsh-client-ui-user-questions 都只导出 apply + props 类型）。
 //       本文件与 index.ts 都按老字段兜底读：宿主补上就自动生效，没有就是 undefined，
 //       所以 wait 在 0.1.5 上实际不会触发——这是有意的降级，不是漏改。
+//       0.1.7 起 ctx.uiSession.sessionStatus 按会话给出 pendingInteraction，
+//       index.ts 从那里把它填进 pending，wait 才真正能触发。
 //
 // 因此：**所有可能不存在的字段一律可选，读之前一律兜底**。
 // 之前直接写 snap.runningCalls.length 就是这次 0.1.5 控制台里
@@ -108,6 +110,7 @@ export class WhaleDriver {
     this.prevRunning = snap.running
     this.prevTurnEnds = snap.turnEnds?.size ?? 0
     this.prevError = errorKey(snap)
+    this.transient = null
     this.stickyUntil = null
     this.current = (snap.pending?.length ?? 0) > 0 ? 'wait' : deriveContinuous(snap, this.stickyUntil, 0)
   }
@@ -119,6 +122,8 @@ export class WhaleDriver {
     }
 
     const err = errorKey(snap)
+    // 新回合优先恢复实时状态，上一回合的庆祝或失落不能遮住开工。
+    if (snap.running && this.prevRunning === false) this.transient = null
     // error 边沿：新错误出现（含从上一次错误恢复后再次出错）
     if (err !== null && err !== this.prevError) {
       this.transient = { state: 'error', until: now + ERROR_MS }
@@ -149,22 +154,22 @@ export class WhaleDriver {
     // working 粘滞：见到工具活动就刷新窗口；回合结束清掉
     if (snap.running && hasToolActivity(snap)) this.stickyUntil = now + WORK_STICKY_MS
     if (!snap.running) this.stickyUntil = null
+    if (this.stickyUntil !== null && now >= this.stickyUntil) this.stickyUntil = null
+
+    // 即使 wait 抢占显示，也必须推进到期状态，否则 deadline 会每 24ms 唤醒一次。
+    if (this.transient !== null && now >= this.transient.until) {
+      this.transient = this.transient.state === 'error'
+        ? { state: 'disappointed', until: this.transient.until + DISAPPOINTED_MS }
+        : null
+      if (this.transient !== null && now >= this.transient.until) this.transient = null
+    }
 
     const waiting = (snap.pending?.length ?? 0) > 0
     let next: WhaleState
     if (waiting) {
       next = 'wait'
     } else if (this.transient !== null) {
-      if (now < this.transient.until) {
-        next = this.transient.state
-      } else if (this.transient.state === 'error') {
-        // 报错演完接一段失落自愈，而不是硬切回常态
-        this.transient = { state: 'disappointed', until: now + DISAPPOINTED_MS }
-        next = 'disappointed'
-      } else {
-        this.transient = null
-        next = deriveContinuous(snap, this.stickyUntil, now)
-      }
+      next = this.transient.state
     } else {
       next = deriveContinuous(snap, this.stickyUntil, now)
     }
@@ -182,6 +187,28 @@ export class WhaleDriver {
     if (this.transient === null || this.transient.state !== 'disappointed') return false
     this.transient = null
     return true
+  }
+
+  /**
+   * 换了当前会话：下一帧当首帧重新起算基线。
+   * 不重置的话，旧会话 running=true、新会话 running=false 会被 step 当成"回合跑完"误庆祝。
+   */
+  reset(): void {
+    this.prevRunning = null
+    this.stickyUntil = null
+    this.transient = null
+    this.current = 'idle'
+    this.prevError = null
+    this.prevTurnEnds = 0
+  }
+
+  /**
+   * 别的会话跑完了：当前会话的快照里看不到这个边沿，由调用方直接递进来。
+   * 正在报错 / 失落时不抢戏。下一次 step() 才会把状态真正切过去。
+   */
+  celebrateOther(now: number): void {
+    if (this.transient !== null && this.transient.state !== 'celebrate' && now < this.transient.until) return
+    this.transient = { state: 'celebrate', until: now + CELEBRATE_MS }
   }
 
   get state(): WhaleState {
