@@ -12,6 +12,7 @@ import { PALETTES, applyPalette, loadPaletteId, paletteOf, savePaletteId } from 
 import { PETS, loadPetId, petOf, savePetId, type PetModule } from './pets'
 import { detectBrowserLocale, getStrings, paletteName, petName, type PetLocale, type PetStrings } from './i18n'
 import { WhaleSwimmer } from './swim'
+import { currentSessionId, partialTextOf, partialHasToolCall, type SessionRow } from './host-snapshot'
 
 // 官方 client 通道的服务闸：等 sessions / locale / uiConversation / uiSession 服务就绪后再 apply。
 // uiConversation 由 @deepseek-ai/dsh-client-ui-conversation 提供，
@@ -102,23 +103,6 @@ interface SessionStatusLike {
 interface SessionStatusSource {
   getSnapshot(): ReadonlyMap<string, SessionStatusLike>
   subscribe(fn: () => void): () => void
-}
-
-type SessionList = ReturnType<ISessions['list']['getSnapshot']>
-type SessionRow = { displayTitle?: string; parentId?: string; origin?: string; retainedBy?: Partial<Record<string, number>> }
-
-/**
- * 当前会话。0.1.5 的会话列表直接给 current；0.1.7 起导航归视图所有（列表里没有 current 了），
- * 主视图用 mainView 这个来源持有它正在显示的会话，看 retainedBy 就知道是哪个。
- */
-function currentSessionId(list: SessionList): string | undefined {
-  // 字段存在就是 0.1.5 形状，undefined 也是它的答案（没选中会话）
-  if ('current' in list) return (list as { current?: string }).current
-  const rows = (list.byId ?? {}) as Readonly<Record<string, SessionRow | undefined>>
-  for (const id of Object.keys(rows)) {
-    if ((rows[id]?.retainedBy?.mainView ?? 0) > 0) return id
-  }
-  return undefined
 }
 
 export function apply(ctx: Context): () => void {
@@ -1044,31 +1028,6 @@ export function apply(ctx: Context): () => void {
     ticker.classList.add('show')
     if (!reduceMotion && tickerRaf === 0) tickerRaf = window.requestAnimationFrame(tickerTick)
   }
-  const partialTextOf = (partial: unknown): string => {
-    if (partial === null || typeof partial !== 'object') return ''
-    const blocks = (partial as { blocks?: readonly unknown[] }).blocks
-    if (!Array.isArray(blocks)) return ''
-    const parts: string[] = []
-    for (const block of blocks) {
-      if (block === null || typeof block !== 'object') continue
-      const b = block as { kind?: string; text?: unknown }
-      if ((b.kind === 'text' || b.kind === 'reasoning') && typeof b.text === 'string') parts.push(b.text)
-    }
-    return parts.join(' ')
-  }
-  // 流式消息里出现 tool-call 块 = 模型已经吐出工具调用。
-  // legacy.runningCalls 是另一条路（工具真正在飞），短调用时可能整个生命周期都观察不到，
-  // 所以两个信号取或，别让鲸鱼漏掉"敲代码"。
-  const partialHasToolCall = (partial: unknown): boolean => {
-    if (partial === null || typeof partial !== 'object') return false
-    const blocks = (partial as { blocks?: readonly unknown[] }).blocks
-    if (!Array.isArray(blocks)) return false
-    for (const block of blocks) {
-      if (block !== null && typeof block === 'object' && (block as { kind?: string }).kind === 'tool-call') return true
-    }
-    return false
-  }
-
   // ===== 后台省电：页面不可见时暂停动画/音效/思考流 =====
   let pageVisible = true
   const onVisibility = () => {

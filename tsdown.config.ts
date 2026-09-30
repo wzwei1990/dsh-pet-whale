@@ -17,7 +17,7 @@ export default [
     platform: 'browser',
     dts: false,
     clean: false,
-    external: [/^@deepseek-ai\//],
+    deps: { neverBundle: [/^@deepseek-ai\//] },
     outputOptions: {
       entryFileNames: 'client.js',
       banner: 'window.__ModuleLoader__.load({ id: "pet-whale", factory: (require) => {',

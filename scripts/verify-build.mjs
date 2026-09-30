@@ -1,38 +1,49 @@
-// 构建产物守卫：确认两个 half 都产出了。
-// 第一个 entry 带 clean:true 会先清空 lib/，第二个 entry 编译失败时 lib/ 会只剩 index.mjs，
-// 而 lib/ 是要提交进仓库的（没有 prepare 脚本，git 装插件时不会自己构建），
-// 缺了 client.js 就等于发了个装上去没反应的空壳。
-// 用法：node scripts/verify-build.mjs（已挂在 npm run build 后面）
-import fs from 'node:fs'
+// 校验真实产物的入口和 DSH 注册契约；可从任意工作目录运行。
+import assert from 'node:assert/strict'
+import { readFileSync, statSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import vm from 'node:vm'
 
-const EXPECTED = [
-  { file: 'lib/index.mjs', min: 40 },
-  { file: 'lib/client.js', min: 20000 },
-]
-
-let failures = 0
-for (const { file, min } of EXPECTED) {
-  const exists = fs.existsSync(file)
-  const size = exists ? fs.statSync(file).size : 0
-  const ok = exists && size >= min
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${file}  ${exists ? size + ' B' : '不存在'}${ok ? '' : `  — 期望至少 ${min} B`}`)
-  if (!ok) failures++
+export const root = fileURLToPath(new URL('../', import.meta.url))
+const providers = {
+  sessions: '@deepseek-ai/dsh-api-session-controller',
+  locale: '@deepseek-ai/dsh-client-locale',
+  uiConversation: '@deepseek-ai/dsh-client-ui-conversation',
+  uiSession: '@deepseek-ai/dsh-client-ui-session',
 }
 
-// client bundle 必须带上 __ModuleLoader__ 契约的头尾，否则 DSH 装上去不会注册
-if (fs.existsSync('lib/client.js')) {
-  const text = fs.readFileSync('lib/client.js', 'utf8')
-  // 尾部会被格式化（缩进、换行都可能变），只认关键结构，别锁死具体写法
-  const tail = text.trimEnd()
-  const ok = text.includes('window.__ModuleLoader__.load(')
-    && text.includes('return module.exports;')
-    && tail.endsWith('});')
-  console.log(`${ok ? 'PASS' : 'FAIL'}  client.js 保留 __ModuleLoader__ 头尾`)
-  if (!ok) failures++
+export async function verifyBuild(directory = root) {
+  const manifest = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8'))
+  for (const file of ['lib/index.mjs', 'lib/client.js']) {
+    assert.ok(statSync(resolve(directory, file)).size > 0, `${file} 为空`)
+  }
+  const host = await import(pathToFileURL(resolve(directory, 'lib/index.mjs')).href)
+  assert.equal(typeof host.default, 'function', 'Node 入口缺少默认 apply')
+  const registrations = []
+  const code = readFileSync(resolve(directory, 'lib/client.js'), 'utf8')
+  // 实际求值能发现顶层 ESM、包装语法错误和注册缺失。
+  vm.runInNewContext(code, { window: { __ModuleLoader__: { load: value => registrations.push(value) } } },
+    { timeout: 5000, filename: 'client.js' })
+  assert.equal(registrations.length, 1, 'client 必须恰好注册一次')
+  const registration = registrations[0]
+  assert.equal(registration.id, manifest.name, 'client 注册 id 与包名不一致')
+  assert.equal(typeof registration.factory, 'function', 'client 缺少 factory')
+  const client = registration.factory(id => { throw new Error(`未声明的运行时 require：${id}`) })
+  assert.equal(typeof client?.apply, 'function', 'client 缺少 apply')
+  assert.ok(Array.isArray(client.inject) && client.inject.length > 0, 'client 缺少 inject')
+  for (const service of client.inject) {
+    assert.ok(providers[service], `校验器缺少服务映射：${service}`)
+    assert.ok(manifest.dsh?.client?.inject?.includes(providers[service]), `manifest 缺少 ${service} 的提供方`)
+  }
 }
 
-if (failures > 0) {
-  console.error(`\n构建产物不完整（${failures} 项不通过）。不要提交 lib/，先修构建。`)
-  process.exit(1)
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  try {
+    await verifyBuild()
+    console.log('PASS  Node 入口、client 注册、导出及 manifest 注入契约')
+  } catch (error) {
+    console.error(`构建产物验证失败：${error.message}`)
+    process.exitCode = 1
+  }
 }
-console.log('\n构建产物完整。')

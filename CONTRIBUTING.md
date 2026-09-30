@@ -35,5 +35,14 @@ README 的「社区 fork」里挂出来，让需要的人能找到。
 5. 提交前跑一遍：
 
    ```sh
-   pnpm typecheck && pnpm test && pnpm build
+   pnpm verify
    ```
+
+## 工程检查
+
+- `pnpm test` 先重建 `lib/`，再运行冒烟、交互、快照解析和构建守卫测试，避免测到旧产物。
+- `pnpm verify` 依次执行类型检查、构建与测试、npm 包消费验收。CI 在 Windows / Linux 和 Node 22.19 / 24 上使用同一命令。
+- `pnpm verify:package` 验收当前 `lib/` 的分发包：离线打包、安装到临时消费方、解析公开入口，并用包内 client 重跑交互回归。单独使用前先运行 `pnpm test`。
+- `npm pack` 的 `prepack` 自动运行完整门禁；内部验收打包使用 `--ignore-scripts`，避免递归触发。
+- `lib/` 仍随 Git 仓库分发。提交源码时一起提交重建后的产物；安装 Git 版本不会自动构建。
+- 临时消费方与项目位于同一盘，结束后自动清理，不修改正在运行的 DSH profile。

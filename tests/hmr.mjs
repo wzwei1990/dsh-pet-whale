@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -54,5 +54,7 @@ test('HMR 校验支持不透明 rev、SSE 前置消息、相对 link、认证和
   } finally {
     server.closeAllConnections()
     await new Promise(resolve => server.close(resolve))
+    // node_modules/pet-whale 是指回仓库的联接，rmSync 只删联接本身
+    rmSync(home, { recursive: true, force: true })
   }
 })

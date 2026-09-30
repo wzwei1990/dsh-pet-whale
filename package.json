@@ -1,6 +1,6 @@
 {
   "name": "pet-whale",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "桌宠小鲸鱼：DeepSeek Harness 桌宠插件，桌面端和网页端都能用，随 agent 状态切换动画（官方轮廓版）",
   "homepage": "https://nzl153.github.io/dsh-pet-whale/preview.html",
   "repository": {
@@ -51,14 +51,15 @@
       ]
     },
     "compatibility": {
-      "dsh": ">=0.1.5-alpha.2 <0.2.0",
+      "dsh": ">=0.1.5-alpha.2 <0.3.0",
       "dshReleases": {
         "0.1.5-alpha.2": "compatible",
         "0.1.5-rc.1": "compatible",
         "0.1.5-rc.2": "compatible",
         "0.1.5-rc.3": "compatible",
         "0.1.7-rc.1": "compatible",
-        "0.1.7-rc.2": "compatible"
+        "0.1.7-rc.2": "compatible",
+        "0.2.0-rc.1": "compatible"
       }
     }
   },
@@ -67,19 +68,22 @@
     "dev:client": "tsdown --config ./tsdown.config.ts --watch",
     "build": "tsdown --config ./tsdown.config.ts && node scripts/verify-build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/smoke.mjs && node --test tests/regression.mjs tests/hmr.mjs",
-    "prepack": "npm run typecheck && npm run build && npm test",
+    "test": "npm run build && npm run test:built",
+    "test:built": "node tests/smoke.mjs && node --test tests/regression.mjs tests/hmr.mjs tests/host-snapshot.mjs tests/build.mjs",
+    "verify": "npm run typecheck && npm test && npm run verify:package",
+    "verify:package": "node scripts/verify-package.mjs",
+    "prepack": "npm run verify",
     "verify:hmr": "node scripts/verify-hmr.mjs",
     "pet:doctor": "node scripts/doctor.mjs",
     "preview": "node scripts/preview-pets.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-api-session-controller": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-locale": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-store": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-chat": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-conversation": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-store": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-chat": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.2.0-rc.1",
     "jsdom": "^30.0.1",
     "tsdown": "0.22.2",
     "typescript": "^5.6.0"

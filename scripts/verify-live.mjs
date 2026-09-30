@@ -5,6 +5,9 @@
 //   token 启动输出里 ?token= 后面那串。dsh 的浏览器信任栅栏是这样工作的：
 //         GET /?token=<token> 会 303 并下发一个 dsh-auth-* Cookie，之后带 Cookie 才 200；
 //         直接打 / 是 401。所以这里先做一次换取，再把 Cookie 带上。
+import { readFileSync } from 'node:fs'
+
+const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 const BASE = process.argv[2] ?? 'http://127.0.0.1:3080'
 const TOKEN = process.argv[3] ?? ''
 
@@ -43,13 +46,8 @@ if (entryMatch !== null) {
   // 0.1.2 起 @deepseek-ai/dsh-client-runtime 已被拆散删除，inject 只能列真实提供服务的包
   check('inject 不含已删除的 dsh-client-runtime', !inject.includes('@deepseek-ai/dsh-client-runtime'), JSON.stringify(inject))
   check(
-    'inject 含 sessions / locale / uiConversation / chat 的提供方',
-    [
-      '@deepseek-ai/dsh-api-session-controller',
-      '@deepseek-ai/dsh-client-locale',
-      '@deepseek-ai/dsh-client-ui-conversation',
-      '@deepseek-ai/dsh-client-ui-chat',
-    ].every((n) => inject.includes(n)),
+    'inject 含 manifest 声明的全部提供方',
+    manifest.dsh.client.inject.every((n) => inject.includes(n)),
     JSON.stringify(inject),
   )
 
