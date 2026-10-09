@@ -518,7 +518,6 @@ export function apply(ctx: Context): () => void {
       showDialog(pick(strings.status[effective]))
       autoSound(effective)
       if (effective === 'celebrate') {
-        recordCelebrate()
         notifyDone()
         const curX = parseFloat(root.style.left) || 0
         const curY = parseFloat(root.style.top) || 0
@@ -1190,7 +1189,7 @@ export function apply(ctx: Context): () => void {
               buildMenu('main')
               menu.classList.add('open')
               positionMenu(lastMenuPos.x, lastMenuPos.y)
-              if (next) sounds.play('bubble')
+              if (!next) sounds.play('bubble')
             },
           ],
           [
@@ -2280,7 +2279,10 @@ export function apply(ctx: Context): () => void {
       const isWaiting = st.pendingInteraction !== undefined
       if (isRunning) running++
       if (isWaiting) waiting++
-      if (statusPrimed && prevOtherRunning.get(id) === true && st.running === false) done ??= id
+      if (statusPrimed && prevOtherRunning.get(id) === true && st.running === false) {
+        if (followAll) recordCelebrate()
+        done ??= id
+      }
       if (statusPrimed && isWaiting && prevOtherWaiting.get(id) !== true) newlyWaiting ??= id
       prevOtherRunning.set(id, isRunning)
       prevOtherWaiting.set(id, isWaiting)
@@ -2368,6 +2370,7 @@ export function apply(ctx: Context): () => void {
     lastErrorText = snapObj.lastAgentError ?? (snapObj.openError != null ? 'open-error' : '')
     trackConcurrency(snapObj.running)
     const step = driver.step(snapObj, performance.now())
+    if (step.completed) recordCelebrate()
     const shown = withOthers(step.state)
     // 首帧（lastShown 为 null）跟 prime 一样不算变化，不冒台词不出声
     setState(shown, lastShown !== null && shown !== lastShown)

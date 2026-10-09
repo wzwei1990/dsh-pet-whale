@@ -94,6 +94,8 @@ export interface WhaleStep {
   state: WhaleState
   /** 状态是新变化（刚进入）还是沿用 */
   changed: boolean
+  /** 完成边沿独立于显示状态，后台庆祝可能已经占着 celebrate。 */
+  completed: boolean
 }
 
 /** 状态驱动：吃快照序列，吐状态序列。 */
@@ -118,9 +120,10 @@ export class WhaleDriver {
   step(snap: WhaleSnapshot, now: number): WhaleStep {
     if (this.prevRunning === null) {
       this.prime(snap)
-      return { state: this.current, changed: false }
+      return { state: this.current, changed: false, completed: false }
     }
 
+    let completed = false
     const err = errorKey(snap)
     // 新回合优先恢复实时状态，上一回合的庆祝或失落不能遮住开工。
     if (snap.running && this.prevRunning === false) this.transient = null
@@ -141,6 +144,7 @@ export class WhaleDriver {
       const grew = ends !== undefined && ends > this.prevTurnEnds
       const turns = grew ? ends : this.prevTurnEnds + 1
       if (turns > this.prevTurnEnds && err === null) {
+        completed = true
         this.transient = { state: 'celebrate', until: now + CELEBRATE_MS }
       }
       this.prevTurnEnds = turns
@@ -175,7 +179,7 @@ export class WhaleDriver {
     }
     const changed = next !== this.current
     this.current = next
-    return { state: next, changed }
+    return { state: next, changed, completed }
   }
 
   /**

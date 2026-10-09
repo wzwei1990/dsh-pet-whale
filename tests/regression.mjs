@@ -119,6 +119,83 @@ scenario('未选中 session 时仍庆祝后台完成', h => {
   assert.ok(h.pet().classList.contains('celebrate'))
   h.tick(2600); assert.ok(h.pet().classList.contains('idle'))
 })
+scenario('后台连续完成在同一段庆祝中逐次计数，重复快照不重复记账', h => {
+  for (let i = 1; i <= 2; i++) {
+    h.status.set('b', { running: true }); h.statusObs.notify()
+    h.status.set('b', { running: false }); h.statusObs.notify()
+    assert.ok(h.pet().classList.contains('celebrate'))
+    assert.equal(JSON.parse(h.w.localStorage.getItem('pet-whale:stats')).completedRounds, i)
+    h.statusObs.notify(); h.list.notify(); h.faces.a.notify()
+    assert.equal(JSON.parse(h.w.localStorage.getItem('pet-whale:stats')).completedRounds, i)
+  }
+  h.tick(2600)
+  assert.equal(JSON.parse(h.w.localStorage.getItem('pet-whale:stats')).completedRounds, 2)
+})
+scenario('同一快照多个后台完成逐个计数，系统通知仍合并一次', h => {
+  h.rows.c = { id: 'c', displayTitle: 'C', retainedBy: {} }
+  h.status.set('b', { running: true }); h.status.set('c', { running: true }); h.statusObs.notify()
+  h.status.set('b', { running: false }); h.status.set('c', { running: false }); h.statusObs.notify()
+  assert.equal(JSON.parse(h.w.localStorage.getItem('pet-whale:stats')).completedRounds, 2)
+  assert.ok(h.pet().classList.contains('celebrate'))
+  assert.equal(h.w.notifications.length, 1)
+  h.statusObs.notify()
+  assert.equal(JSON.parse(h.w.localStorage.getItem('pet-whale:stats')).completedRounds, 2)
+  assert.equal(h.w.notifications.length, 1)
+}, { storage: { 'pet-whale:sys-notify': '1' }, setup(w) {
+  Object.defineProperty(w.document, 'hidden', { value: true })
+  w.notifications = []
+  w.Notification = class {
+    static permission = 'granted'
+    constructor() { w.notifications.push(this) }
+    close() {}
+  }
+} })
+scenario('当前会话报错遮住庆祝时，后台完成仍计数', h => {
+  h.snaps.a.lastAgentError = 'boom'; h.faces.a.notify()
+  h.status.set('b', { running: true }); h.statusObs.notify()
+  h.status.set('b', { running: false }); h.statusObs.notify()
+  assert.ok(h.pet().classList.contains('error'))
+  assert.equal(JSON.parse(h.w.localStorage.getItem('pet-whale:stats')).completedRounds, 1)
+})
+scenario('当前回合在后台庆祝期间完成也计数', h => {
+  h.snaps.a.running = true; h.faces.a.notify()
+  h.status.set('b', { running: true }); h.statusObs.notify()
+  h.status.set('b', { running: false }); h.statusObs.notify()
+  assert.ok(h.pet().classList.contains('celebrate'))
+  h.snaps.a.running = false; h.faces.a.notify()
+  assert.equal(JSON.parse(h.w.localStorage.getItem('pet-whale:stats')).completedRounds, 2)
+})
+scenario('当前会话完成每轮只计一次，滞后的 turnEnds 不再计数', h => {
+  for (let i = 1; i <= 2; i++) {
+    h.snaps.a.running = true; h.faces.a.notify()
+    h.snaps.a.running = false; h.faces.a.notify()
+    h.chats.a.legacy.turnEnds.set(i, i); h.chatObs.a.notify()
+    h.statusObs.notify(); h.faces.a.notify()
+    assert.equal(JSON.parse(h.w.localStorage.getItem('pet-whale:stats')).completedRounds, i)
+  }
+})
+scenario('新出现的已完成后台会话和子代理不计数', h => {
+  h.status.set('c', { running: false }); h.statusObs.notify()
+  h.rows.b.parentId = 'a'; h.list.notify()
+  h.status.set('b', { running: true }); h.statusObs.notify()
+  h.status.set('b', { running: false }); h.statusObs.notify()
+  assert.ok(h.pet().classList.contains('idle'))
+  assert.equal(JSON.parse(h.w.localStorage.getItem('pet-whale:stats')).completedRounds, 0)
+})
+scenario('关闭跟随后后台完成不计数，也不播放庆祝', h => {
+  h.status.set('b', { running: true }); h.statusObs.notify()
+  h.status.set('b', { running: false }); h.statusObs.notify()
+  assert.equal(JSON.parse(h.w.localStorage.getItem('pet-whale:stats')).completedRounds, 0)
+  assert.ok(h.pet().classList.contains('idle'))
+}, { storage: { 'pet-whale:follow-all': '0' } })
+scenario('假装工作只覆盖表现，不漏计真实完成', h => {
+  h.snaps.a.running = true; h.faces.a.notify()
+  h.snaps.a.running = false; h.faces.a.notify()
+  h.status.set('b', { running: true }); h.statusObs.notify()
+  h.status.set('b', { running: false }); h.statusObs.notify()
+  assert.equal(JSON.parse(h.w.localStorage.getItem('pet-whale:stats')).completedRounds, 2)
+  assert.ok(h.pet().classList.contains('working'))
+}, { storage: { 'pet-whale:pretend': '1' } })
 scenario('列表补齐子代理元数据后角标立即刷新', h => {
   h.status.set('b', { running: true }); h.statusObs.notify()
   assert.equal(h.root().querySelector('.dsh-whale-badge').textContent, '1')
@@ -141,6 +218,24 @@ scenario('AudioContext 构造失败不打断 pointerdown', h => {
   h.pointer('pointerdown')
   assert.equal(h.errors.length, 0)
 }, { setup(w) { w.AudioContext = class { constructor() { throw new Error('audio blocked') } } } })
+scenario('快捷菜单静音不试音，解除静音播放一次 bubble', h => {
+  h.menu('音效')
+  assert.equal(h.w.localStorage.getItem('pet-whale:muted'), '1')
+  assert.equal(h.w.notes, 0)
+  h.menu('音效')
+  assert.equal(h.w.localStorage.getItem('pet-whale:muted'), '0')
+  assert.equal(h.w.notes, 1)
+}, { setup(w) {
+  w.notes = 0
+  w.AudioContext = class {
+    state = 'running'
+    currentTime = 0
+    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} } }
+    createOscillator() { return { frequency: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+      connect() {}, start() { w.notes++ }, stop() {} } }
+    close() { return Promise.resolve() }
+  }
+} })
 
 scenario('直接移除根 DOM 后自动注销全部资源', async h => {
   h.pointer('pointerdown'); h.root().remove()
