@@ -32,6 +32,12 @@ DeepSeek Harness（DSH）Web 界面的桌宠插件：右下角一只**官方轮�
 | 后台省电 | 页面切到后台自动暂停所有动画、音效和思考流，回来即恢复 |
 | idle 小动作 | idle 久了会随机游动、左右张望、吐泡泡，不再只是打瞌睡 |
 | 错误关怀 | error 状态下点击鲸鱼或右键「📋 复制错误信息」，直接把错误文本复制到剪贴板 |
+| 多会话并发 | 别的会话在跑时头顶冒气泡角标（数字 1~9，超过显示 9+，悬停有说明），跟着身体起伏漂动；并发中会说「加班」，全部跑完喊「收工」 |
+| 摸头 / 蹭蹭 | 鼠标在头顶来回蹭＝摸摸头（冒爱心 + 眯眼享受）；一直狂蹭会生气游走，冷却后才理你 |
+| 贴边压扁 | 拖到屏幕上下边会被压扁，锚在被压的那条边 |
+| 音量三档 | 右键菜单可直接切音量档位（偏好持久化） |
+| 触摸拖拽 | 手机端支持单指拖拽与猛甩，多指同时按不会互相打架 |
+| 后台完成不漏 | 切到后台再回来，完成 / 报错不会漏计；没有音频设备时试音不再报错 |
 | 换肤 | 7 套预设色板（默认**主题蓝**）：主题蓝 / 陶土 / 深海蓝 / 抹茶绿 / 樱粉 / 墨灰 / 夜黑；夜黑为深色皮肤示例（眼睛自动反白）。扩展只需在 `src/client/palettes.ts` 加一行 |
 | 多宠物 | 右键 →「外观 → 🐾 宠物」在**小鲸鱼 / 小猫 / 灵儿**之间切换，选择持久化。每只宠物自带 SVG、独立动画样式表和**自己的台词**（猫不会说"深潜"），互不干扰；色板与大小对任何宠物通用，人物型可以用 `size` 声明竖版盒子（灵儿 104×140）。加一只新宠物 = 新建 `src/client/pets/<id>/` 一个目录 + 注册一行，详见 [docs/MULTI-PET.md](docs/MULTI-PET.md) |
 | 隐藏/召回 | 右键菜单「🙈 隐藏到右下角」收起桌宠，右下角出现 🐳 小按钮，点击召回；隐藏状态跨刷新记忆，隐藏期间自动静音、不说话 |
@@ -104,12 +110,21 @@ idle 时的小动作是**声明式**的：宠物用 `micro: ['spin', 'spell', �
 插件按洗牌袋轮播并可配一句碎语（`i18n.micro[id]`）—— 灵儿关了御剑就靠这套（原地转圈/放法术/扇扇子/远眺），
 新宠物加动作 = 声明 id + 写一段 keyframes，插件逻辑不用改。
 
+上游 1.2.x 新加的「鲸鱼专属部件」（角标气泡、摸头按压与爱心、贴边压扁、摸头闭眼）已经**泛化进 `BASE_CSS`**，
+位置走 CSS 变量（`--pw-badge-*` / `--pw-pat-heart-*`，默认值 = 鲸鱼原值，所以鲸鱼观感不变）⇒ 三只宠物都能用；
+`pnpm pet:doctor` 里那条「行为层 class × 每只宠物样式覆盖」检查会在上游再加新状态时直接报出「缺哪只宠物」。
+
 ```sh
-pnpm preview      # 生成 pet-preview.html：所有宠物 × 多状态铺成一张网格，浏览器直接打开
-                  #   node scripts/preview-pets.mjs --only=linger --states=micro-gaze --scale=4  挑单个动作
-pnpm sync:preview # 把宠物资源同步进手写的 preview.html（它现在也能切宠物：?pet=cat / ?pet=linger，
-                  #   并会按 micro 清单生成「原地动作」试演按钮）
-pnpm pet:doctor   # 体检：样式切分、宠物注册、动作声明与样式是否配对、预览页同步、构建新鲜度（只读）
+pnpm build           # 构建 lib/（含 verify-build 产物结构校验）
+pnpm typecheck       # tsc --noEmit
+pnpm test            # 构建 + 全部测试（smoke / regression / hmr / host-snapshot / build）
+pnpm verify          # typecheck + test + verify:package —— 发版/大改前的完整闸门
+pnpm verify:package  # 离线验收 npm 实际分发包（公开入口、依赖注入、文件清单、字节一致性、包内回归）
+pnpm verify:hmr      # 校验当前仓库 ↔ 运行中 DSH 的 HMR 链路一致
+pnpm preview         # 生成 pet-preview.html：所有宠物 × 多状态铺成一张网格，浏览器直接打开
+                     #   node scripts/preview-pets.mjs --only=linger --states=micro-gaze --scale=4  挑单个动作
+pnpm pet:doctor      # 本 fork 体检（只读）：BASE_CSS 是否混进宠物规则、宠物是否注册、动作声明与样式是否配对、
+                     #   行为层 class 是否每只宠物都有样式、构建产物是否过期
 ```
 
 改造过之后，**上游更新了怎么合进来**（merge 流程、冲突对照表、回滚）见
@@ -120,12 +135,11 @@ pnpm pet:doctor   # 体检：样式切分、宠物注册、动作声明与样式
 - `src/client/palettes.ts` — 色板扩展点。加一行就是一个新皮肤；`eye`/`pupil` 字段用于深色皮肤的"眼睛反白"
 - `src/client/pets/` — 宠物扩展点。加一只宠物 = 一个目录 + `pets/index.ts` 一行；`pets/cat/` 是可照抄的最小范例
 - `src/client/i18n.ts` + `pets/<id>/text.ts` — 文案扩展点。基准文案是鲸鱼口吻，宠物用 `PetModule.text` 覆盖要改的条目
-- `preview.html` — 手写交互预览台（切宠物/状态、投喂、翻滚、追光、巡游）；V1/V2 是鲸鱼的设计稿，也是 `extract-whale.mjs` 的抽取源，其余宠物由 `pnpm sync:preview` 注入
-- `scripts/preview-pets.mjs` — 自动生成的检查台（`pnpm preview`）：所有宠物 × 全部状态铺成网格
-- `scripts/extract-whale.mjs` — 从 `preview.html` 同步 V2 SVG（含 CSS 变量替换），改完模板重跑 `pnpm extract`（跑完用 `git diff src/client/whale.ts` 确认没有意外变化）
-- `scripts/doctor.mjs` — 改造体检（`pnpm pet:doctor`）：BASE_CSS 是否混进宠物规则、宠物是否注册、预览页与 `whale.ts` 是否同步、产物是否过期；合并上游后跑它
+- `preview.html` — **上游 1.2.3 起的薄预览台**：直接加载插件本体 `lib/client.js`，只提供状态按钮与语言切换；\n  本 fork 在它上面加了「换宠物」一行（靠插件暴露的 `document.__petWhalePets` / `__petWhaleActivePet` / `__petWhaleSetPet`，\n  上游原版没有这些接口时这一行自动隐藏）。改样式/改状态只需重跑 `pnpm build`，不用再同步预览页\n- `scripts/preview-pets.mjs` — 自动生成的检查台（`pnpm preview`）：所有宠物 × 全部状态铺成网格
+- `src/client/whale.ts` — 鲸鱼 SVG 的唯一来源（上游 1.2.3 起删除了 `extract-whale.mjs` 抽取脚本）
+- `scripts/doctor.mjs` — 本 fork 体检（`pnpm pet:doctor`，只读）：BASE_CSS 是否混进宠物私有规则、宠物是否注册、\n  动作声明与样式是否配对、**行为层 class × 每只宠物样式覆盖**、`lib/client.js` 是否比 `src/` 旧；合并上游后跑它
 - `scripts/verify-live.mjs` — 重启后的一键线上验证（boot 清单 / bundle 下载 / 注册格式）
-- 状态来源（dsh 0.1.5）：会话生命周期取自 `ctx.sessions` 的会话快照（`running` / `lastAgentError` / `openError`）；
+- 状态来源（dsh 0.2.0；宿主快照适配见 `src/client/host-snapshot.ts`）：会话生命周期取自 `ctx.sessions` 的会话快照（`running` / `lastAgentError` / `openError`）；
   `partial` / `runningCalls` / `turnEnds` 取自 `ctx.uiConversation` 的 chat 投影（`ChatSnapshot.legacy`）。
   两处的字段对照和 0.1.5 的变更说明写在 `src/client/state.ts` 文件头。
 

@@ -24,6 +24,12 @@ The repository's [preview.html](preview.html) is the same page and can be opened
 | Think ticker | While thinking, the latest reasoning text scrolls above the whale (can be toggled) |
 | Smart avoidance | In idle, the whale moves aside when the cursor lingers nearby; grabbing/right-click cancels and cools down for 8s |
 | Theme sync | Follows DSH light/dark theme for bubbles, dialogs, and shadows |
+| Multi-session | While other sessions run, a bubble badge (1~9, "9+" above) floats over the head and follows the body bob; the pet complains about overtime and announces when everything is done |
+| Headpat | Rub the cursor back and forth over the head to pat it (hearts + happy squint); over-rubbing makes it sulk and wander off until it cools down |
+| Edge squash | Drag it against the top/bottom screen edge and it squashes, anchored to the pressed edge |
+| Volume levels | Switch output volume from the right-click menu (persisted) |
+| Touch drag | Phones support one-finger drag and shake; extra fingers no longer fight the drag |
+| Background completion | Completing/erroring in a background tab is no longer missed, and the audio test no longer fails without an output device |
 | Background power saving | Animations, sounds, and the think ticker pause when the page is hidden |
 | Idle micro-movements | Random swimming, looking around, and bubble blowing |
 | Error care | Click the whale during error state to copy the error text |
@@ -81,12 +87,15 @@ Client-side development changes do not require a restart or hard refresh — see
 ## Build & Test
 
 ```sh
-pnpm install
-pnpm typecheck   # TypeScript type check
-pnpm dev           # dev watch: rebuild lib/client.js on src/client changes; DSH HMR applies it automatically
-pnpm build       # tsdown → lib/index.mjs + lib/client.js
-pnpm test        # jsdom smoke test (state machine / interactions / skins / cleanup)
-pnpm verify:hmr    # verify local repo <-> running DSH HMR wiring
+pnpm build           # build lib/ (includes verify-build artifact checks)
+pnpm typecheck       # tsc --noEmit
+pnpm test            # build + all tests (smoke / regression / hmr / host-snapshot / build)
+pnpm verify          # typecheck + test + verify:package -- the full gate before release
+pnpm verify:package  # offline acceptance of the real npm tarball (entry, deps, file list, bytes, in-package regression)
+pnpm verify:hmr      # verify local repo <-> running DSH HMR wiring
+pnpm preview         # generate pet-preview.html: every pet x every state in one grid
+pnpm pet:doctor      # fork health check (read-only): base CSS clean, pets registered, micro styles paired,
+                     #   behaviour-layer classes styled per pet, build artifact freshness
 ```
 
 ## Development
@@ -96,15 +105,9 @@ pnpm verify:hmr    # verify local repo <-> running DSH HMR wiring
   `pets/cat/` is the minimal example to copy.
 - `src/client/i18n.ts` + `pets/<id>/text.ts` — text extension point. The base strings are written in the
   whale's voice; a pet overrides just the entries it wants via `PetModule.text`.
-- `preview.html` — hand-written interactive playground (pet/state switching, feed, roll, eye tracking,
-  roaming). Its V1/V2 blocks are the whale's design source and the input of `extract-whale.mjs`; other pets
-  are injected by `pnpm sync:preview` (`?pet=cat`, `?pet=linger` open a pet directly).
-- `scripts/preview-pets.mjs` — generated check sheet (`pnpm preview`): every pet × every state in one grid.
-- `scripts/extract-whale.mjs` — sync the V2 SVG from `preview.html` into `src/client/whale.ts`
-  (run `git diff src/client/whale.ts` afterwards to confirm nothing else moved).
-- `scripts/doctor.mjs` — fork health check (`pnpm pet:doctor`): base CSS free of pet rules, pets registered,
-  preview page and `whale.ts` in sync, build artifact fresh. Run it after merging upstream.
-- Merging upstream updates into this fork: see [docs/UPSTREAM-SYNC.md](docs/UPSTREAM-SYNC.md).
+- `preview.html` — since upstream 1.2.3 a **thin page** that loads the plugin itself (`lib/client.js`) and\n  only offers state buttons plus a language switch. This fork adds a "Switch pet" row on top of it, driven by the\n  plugin-exposed `document.__petWhalePets` / `__petWhaleActivePet` / `__petWhaleSetPet` (the row hides itself when those\n  are absent, i.e. on upstream builds). Rebuilding (`pnpm build`) is all it takes after changing styles or states.\n- `scripts/preview-pets.mjs` — generated check sheet (`pnpm preview`): every pet × every state in one grid.
+- `src/client/whale.ts` — the single source of the whale SVG (upstream dropped `extract-whale.mjs` in 1.2.3).
+- `scripts/doctor.mjs` — fork health check (`pnpm pet:doctor`, read-only): base CSS free of pet rules, pets\n  registered, micro ids paired with styles, **behaviour-layer classes styled for every pet**, and build freshness.\n- Merging upstream updates into this fork: see [docs/UPSTREAM-SYNC.md](docs/UPSTREAM-SYNC.md).
 - `scripts/verify-live.mjs` — one-click live verification after restart.
 - State source (dsh 0.1.5): session lifecycle comes from the `ctx.sessions` snapshot
   (`running` / `lastAgentError` / `openError`); `partial` / `runningCalls` / `turnEnds` come from the
