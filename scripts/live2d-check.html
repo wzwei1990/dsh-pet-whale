@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>pet-whale · Live2D 渲染器联调</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14181f; font-family: system-ui, sans-serif; color: #cfe0ff; }
+  #stage { position: absolute; left: 40px; top: 40px; width: 220px; height: 340px; outline: 1px dashed #33507f; }
+  .hud { position: absolute; left: 40px; bottom: 24px; font-size: 13px; line-height: 1.9; }
+  .hud code { color: #9fe0b0; }
+  #log { position: absolute; right: 24px; top: 24px; width: 420px; font-size: 12px; color: #8fb0e0; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div class="hud">
+  <div>这只盒子就是桌宠容器（220×340，与 <code>size</code> 一致）；点一下应播 Tap。</div>
+  <div>渲染器：<code>lib/live2d-runtime.mjs</code>（与插件内同一份 runtime.ts 编译产物）</div>
+</div>
+<div id="log"></div>
+<script type="module">
+  const log = (msg) => { document.getElementById('log').textContent += msg + '\n' }
+  window.addEventListener('error', (e) => log('window error: ' + e.message))
+
+  // 资产根：本页假设一个带 CORS 的静态服务在 5200（见 docs/LIVE2D.md）
+  const q = new URLSearchParams(location.search)
+  const base = q.get('base') || 'http://127.0.0.1:5200/'
+  const modelPath = q.get('model') || 'models/haru/haru_greeter_t03.model3.json'
+  const zoom = Number(q.get('zoom') || 1.15)
+  const offsetY = Number(q.get('offy') || 0.02)
+  const { mountLive2D } = await import('../lib/live2d-runtime.mjs')
+  const el = document.getElementById('stage')
+  const unmount = mountLive2D(el, {
+    base,
+    model: modelPath,
+    zoom,
+    offsetY,
+    tapGroup: 'Tap',
+    debug: true,
+  })
+  window.__unmount = unmount
+  log('mount 已调用，base=' + base)
+
+  // 等模型起来后把状态打出来，作为「真的在跑」的证据
+  const timer = setInterval(() => {
+    const m = window.__petWhaleLive2D?.model
+    if (!m) return
+    clearInterval(timer)
+    const mm = m.internalModel.motionManager
+    const d = window.__petWhaleLive2D
+    log('模型就绪：' + JSON.stringify({
+      groups: Object.keys(mm.definitions),
+      counts: Object.fromEntries(Object.keys(mm.definitions).map((g) => [g, mm.definitions[g].length])),
+      box: { w: el.clientWidth, h: el.clientHeight },
+      renderer: { w: d.app.screen.width, h: d.app.screen.height },
+    }))
+    log('当前动作：' + (mm.state.currentGroup ?? '—') + '[' + (mm.state.currentIndex ?? '-') + ']')
+    el.addEventListener('click', () => {
+      setTimeout(() => log('点击后动作：' + (mm.state.currentGroup ?? '—') + '[' + (mm.state.currentIndex ?? '-') + ']'), 120)
+    })
+  }, 200)
+</script>
+</body>
+</html>

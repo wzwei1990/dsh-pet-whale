@@ -20,7 +20,12 @@ function run(args, cwd, env = process.env) {
 
 // 与项目同盘创建临时消费方，不向 C 盘安装软件或依赖。
 const temporary = mkdtempSync(join(root, '.package-test-'))
+// 本机环境可能注入 npm_config_allow_scripts（白名单式安装脚本策略）：npm 会把它转成
+// `--allow-scripts` 传给命令行，而项目级安装禁止这个参数 → 报 EALLOWSCRIPTS。
+// 包校验只需要离线装一个 tarball，这里显式清掉，避免校验结果受环境影响。
 const npmEnv = { ...process.env, npm_config_cache: join(temporary, 'npm-cache') }
+delete npmEnv.npm_config_allow_scripts
+delete npmEnv.NPM_CONFIG_ALLOW_SCRIPTS
 try {
   await verifyBuild()
   // 外层 verify/prepack 已验证构建；ignore-scripts 防止递归执行 prepack。
@@ -31,7 +36,9 @@ try {
   const parsedPack = JSON.parse(packText.slice(jsonStart))
   const packed = Array.isArray(parsedPack) ? parsedPack[0] : (parsedPack.files ? parsedPack : Object.values(parsedPack)[0])
   for (const { path } of packed.files) {
-    assert.match(path, /^(?:package\.json|cordis\.patch\.yml|LICENSE|README(?:\.en)?\.md|lib\/(?:index\.mjs|client\.js))$/, `非预期文件进入包：${path}`)
+    // assets/live2d/** 是自制 Live2D 模型的运行时资产（p2l.js / wasm / .p2lrt），由 Node 半的
+    // /pet-whale/live2d/* 路由提供，必须随包分发；其余路径仍严格白名单。
+    assert.match(path, /^(?:package\.json|cordis\.patch\.yml|LICENSE|README(?:\.en)?\.md|lib\/(?:index\.mjs|client\.js)|assets\/live2d\/[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+)$/, `非预期文件进入包：${path}`)
   }
   const consumer = join(temporary, 'consumer')
   mkdirSync(consumer)

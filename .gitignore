@@ -25,3 +25,9 @@ scripts/fix-*.mjs
 scripts/refactor/
 scripts/add-*.mjs
 scripts/search-*.mjs
+
+# 自制 Live2D 模型运行时（PSD2Live 导出物，许可待确认；由 tools/live2d 本地生成）
+assets/live2d/
+
+# 本地打包产物（安装测试用，不进仓库）
+*.tgz

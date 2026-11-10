@@ -185,6 +185,12 @@ export function apply(ctx: Context): () => void {
     pet.querySelector<SVGCircleElement>(activePet.pupilSelector ?? '.pupil-highlight')
 
   /**
+   * 脚本化宠物（Live2D）的卸载句柄：切换宠物前必须先拆掉上一只的渲染循环，
+   * 否则切走之后 PIXI 的 ticker 还在跑。见 pets/types.ts 的 mount 契约。
+   */
+  let petUnmount: (() => void) | null = null
+
+  /**
    * 切换宠物：换内联 SVG + 换宠物私有样式表 + 同步容器尺寸变量。
    * 不碰状态 class，所以新宠物立刻按当前状态动起来，不需要重放状态机。
    */
@@ -203,9 +209,13 @@ export function apply(ctx: Context): () => void {
     }
     // 文案跟着宠物走：基准（鲸鱼口吻）叠加这只宠物的覆盖，再重算一遍 a11y 标签
     strings = getStrings(locale, next.text?.[locale])
+    petUnmount?.()
+    petUnmount = null
     pet.innerHTML = next.html
     pet.setAttribute('aria-label', strings.aria.petName(petDisplayName(next)))
     petStyle.textContent = next.css
+    const unmount = next.mount?.(pet)
+    petUnmount = typeof unmount === 'function' ? unmount : null
   }
   applyPet(activePet.id)
 

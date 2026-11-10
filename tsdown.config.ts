@@ -25,4 +25,16 @@ export default [
       intro: 'var module = { exports: {} }; var exports = module.exports;',
     },
   },
+  {
+    // Live2D 渲染器的**独立可执行副本**：只给本地联调页（scripts/live2d-check.html）用，
+    // 让「不装进 DSH 也能验证渲染链路」这件事成立。正式路径仍然走上面的 client bundle。
+    name: 'pet-whale/live2d-runtime',
+    entry: { 'live2d-runtime': 'src/client/pets/live2d/runtime.ts' },
+    outDir: 'lib',
+    format: 'esm',
+    platform: 'browser',
+    dts: false,
+    clean: false,
+    outputOptions: { entryFileNames: 'live2d-runtime.mjs' },
+  },
 ]

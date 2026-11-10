@@ -57,4 +57,14 @@ export interface PetModule {
    * 灵儿的 4 个：spin(原地转圈·绕竖轴) spell(放法术) fan(扇扇子) gaze(远眺)
    */
   micro?: string[]
+  /**
+   * 可选：把宠物挂到「脚本化渲染」上（Live2D canvas 这类）。html/css 表达不了的东西走这里。
+   *
+   * 契约：
+   * - el 就是 `.pet-official` 容器；mount 自己在里面建 canvas / 起渲染循环
+   * - 返回卸载函数：切宠物时插件会调用它（**必须释放渲染循环**，否则切走之后还在跑）
+   * - el 的尺寸（CSS 变量 --pw-pet-w/h）已经按 size 设好，mount 直接量 el.clientWidth/Height
+   * - 容器上的状态 class（idle/working/celebrate/…）照旧会切；需要的话监听 el 的 class 变化
+   */
+  mount?: (el: HTMLElement) => void | (() => void)
 }

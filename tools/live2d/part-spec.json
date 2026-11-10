@@ -1,0 +1,57 @@
+{
+  "//": "部件规格：一次拆件的完整配方。换角色时改这里，脚本不用改。",
+  "canvas": { "width": 1024, "height": 1024 },
+  "source": "character.png",
+  "sam": {
+    "//": "MobileSAM 权重与输出目录（相对本文件所在目录的上级工作区）",
+    "checkpoint": "../../mobile_sam.pt",
+    "outDir": "../../out"
+  },
+  "parts": [
+    { "name": "back_hair",   "box": [212, 126, 812, 705], "role": "back_hair",  "dilate": 0, "close": 2, "fillHoles": true,  "order": 1 },
+    { "name": "bottomwear",  "box": [325, 395, 725, 765], "role": "bottomwear", "dilate": 4, "close": 0, "fillHoles": false, "order": 2 },
+    { "name": "legs_shoes",  "box": [398, 636, 662, 1020], "role": "legwear",   "dilate": 4, "close": 0, "fillHoles": false, "order": 4 },
+    { "name": "topwear",     "box": [452, 176, 612, 478], "role": "topwear",    "dilate": 4, "close": 0, "fillHoles": false, "order": 5 },
+    { "name": "face_neck",   "box": [438, 52, 578, 232],  "role": "face",       "dilate": 4, "close": 0, "fillHoles": false, "order": 6 },
+    { "name": "eyebrow",     "box": [458, 72, 552, 96],   "role": "eyebrow",    "dilate": 4, "close": 0, "fillHoles": false, "order": 7 },
+    { "name": "eyes",        "box": [460, 82, 550, 132],  "role": "eyewhite",   "dilate": 3, "close": 0, "fillHoles": false, "order": 8 },
+    { "name": "mouth",       "box": [492, 138, 526, 156], "role": "mouth",      "dilate": 4, "close": 0, "fillHoles": false, "order": 10 },
+    { "name": "front_hair",  "box": [395, 18, 645, 255],  "role": "front_hair", "dilate": 0, "close": 2, "fillHoles": true,  "order": 11 },
+    { "name": "headwear",    "box": [415, 12, 605, 125],  "role": "headwear",   "dilate": 4, "close": 0, "fillHoles": false, "order": 12 }
+  ],
+  "derived": {
+    "//": "由上面部件自动合成的层：residual（补洞，内置孔洞）与 eye_close（闭眼补片）。",
+    "residual": {
+      "enabled": true,
+      "role": "objects",
+      "order": 3,
+      "minComponentPx": 300,
+      "edgeBandPx": 6
+    },
+    "eyeClose": {
+      "enabled": true,
+      "role": "eye_close",
+      "order": 9,
+      "fromPart": "eyes",
+      "lidLineHeightRatio": 0.62,
+      "lidLineThickness": 5,
+      "patchGrowPx": 2
+    }
+  },
+  "rig": {
+    "//": "PSD2Live rig_generate 之后要补的关键形（它不会自动做眨眼）",
+    "blink": {
+      "enabled": true,
+      "parameter": "ParamEyeLOpen",
+      "shapes": [
+        { "targetKind": "warp", "targetName": "DeformEyeShapeBoth", "value": 0, "scaleY": 0.12 },
+        { "targetKind": "mesh", "targetPart": "eyes", "value": 0, "scaleY": 0.12 }
+      ]
+    }
+  },
+  "export": {
+    "targets": ["moc3", "web"],
+    "moc3Dir": "../../../dsh-live2d-own/export",
+    "webDir": "../../../dsh-live2d-own/export-web"
+  }
+}
