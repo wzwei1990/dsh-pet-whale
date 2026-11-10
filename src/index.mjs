@@ -5,9 +5,9 @@
 //   /pet-whale/live2d/<model>/{p2l.js, p2l_runtime.wasm, <model>.p2lrt}
 //
 // 安全约束：
-// - 只服务 assets/live2d 目录内的文件（normalize + 前缀校验，拒绝 ../ 穿越）
+// - 只服务允许的根目录内的文件（normalize + 前缀校验，拒绝 ../ 穿越）
 // - 只允许白名单扩展名
-// - 长缓存（模型文件按 hash 命名时可用 immutable；这里给 1 天 + ETag 用 mtime/size）
+// - 一天缓存 + ETag（mtime/size），模型换文件后自动失效
 import { createReadStream, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, normalize, resolve, sep } from 'node:path'
@@ -37,13 +37,37 @@ const MIME = {
 }
 
 export const name = 'pet-whale'
+
 /** webServer 用于给自制模型资产挂静态路由；没它时客户端仍可用（只是拿不到模型） */
 export const inject = ['webServer']
 
-export default function apply(ctx) {
-  const webServer = ctx?.webServer
+/**
+ * 具名导出 apply：cordis 只在具名 apply 上应用模块的 `inject`。
+ * 只导出 default 时 `ctx.webServer` 会抛 `cannot get property "webServer" without inject`
+ * （2026-11 实测，对照 dsh-tts 的写法）。文件末尾同时保留 default 导出，供构建校验脚本使用。
+ */
+export function apply(ctx) {
+  // 双保险：即使宿主/版本对 inject 的处理不同，也不让插件激活失败（大不了路由不挂）
+  let webServer
+  try {
+    webServer = ctx?.webServer
+  } catch {
+    webServer = undefined
+  }
+  if (!webServer) {
+    try {
+      webServer = ctx?.get?.('webServer')
+    } catch {
+      webServer = undefined
+    }
+  }
+
   if (!webServer?.register) {
-    ctx?.logger?.('debug', '[pet-whale] 宿主未提供 webServer，跳过 /pet-whale/live2d 路由（自制模型将 404）')
+    try {
+      ctx?.logger?.('debug', '[pet-whale] 宿主未提供 webServer，跳过 /pet-whale/live2d 路由（自制模型将 404）')
+    } catch {
+      /* 忽略 */
+    }
     return
   }
 
@@ -60,6 +84,7 @@ export default function apply(ctx) {
         res.end('bad path')
         return
       }
+
       const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase()
       const type = MIME[ext]
       if (!type) {
@@ -67,6 +92,7 @@ export default function apply(ctx) {
         res.end('forbidden type')
         return
       }
+
       // 依次在包内 / 用户目录里找；都找不到才 404
       let target = null
       let stat = null
@@ -88,6 +114,7 @@ export default function apply(ctx) {
         res.end('not found')
         return
       }
+
       const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`
       if (req.headers['if-none-match'] === etag) {
         res.writeHead(304, { ETag: etag })
@@ -104,5 +131,12 @@ export default function apply(ctx) {
       createReadStream(target).pipe(res)
     },
   })
-  ctx?.logger?.('info', '[pet-whale] 已挂载 /pet-whale/live2d/*（自制 Live2D 模型资产）')
+
+  try {
+    ctx?.logger?.('info', '[pet-whale] 已挂载 /pet-whale/live2d/*（自制 Live2D 模型资产）')
+  } catch {
+    /* 忽略 */
+  }
 }
+
+export default apply
