@@ -9,11 +9,22 @@
 // - 只允许白名单扩展名
 // - 长缓存（模型文件按 hash 命名时可用 immutable；这里给 1 天 + ETag 用 mtime/size）
 import { createReadStream, statSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const ASSET_ROOT = resolve(here, '../assets/live2d')
+
+/**
+ * 资产查找顺序（先包内、后用户目录）：
+ * 1. <包>/assets/live2d            —— 走本地 tgz/内置模型时用（仓库默认不含，见 .gitignore 说明）
+ * 2. $DSH_HOME/dsh-pet/live2d      —— 从 GitHub 安装时的推荐位置：用户自己把
+ *    {p2l.js, p2l_runtime.wasm, <name>.p2lrt} 丢进来即可，模型不必进仓库
+ */
+const ASSET_ROOTS = [
+  resolve(here, '../assets/live2d'),
+  resolve(process.env.DSH_HOME || join(homedir(), '.dsh'), 'dsh-pet', 'live2d'),
+]
 
 const MIME = {
   '.js': 'application/javascript; charset=utf-8',
@@ -49,24 +60,30 @@ export default function apply(ctx) {
         res.end('bad path')
         return
       }
-      const target = normalize(join(ASSET_ROOT, rel))
-      if (!target.startsWith(ASSET_ROOT + sep) && target !== ASSET_ROOT) {
-        res.writeHead(403)
-        res.end('forbidden')
-        return
-      }
-      const ext = target.slice(target.lastIndexOf('.')).toLowerCase()
+      const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase()
       const type = MIME[ext]
       if (!type) {
         res.writeHead(403)
         res.end('forbidden type')
         return
       }
-      let stat
-      try {
-        stat = statSync(target)
-        if (!stat.isFile()) throw new Error('not a file')
-      } catch {
+      // 依次在包内 / 用户目录里找；都找不到才 404
+      let target = null
+      let stat = null
+      for (const root of ASSET_ROOTS) {
+        const candidate = normalize(join(root, rel))
+        if (!candidate.startsWith(root + sep) && candidate !== root) continue
+        try {
+          const s = statSync(candidate)
+          if (!s.isFile()) continue
+          target = candidate
+          stat = s
+          break
+        } catch {
+          /* 这个根里没有，试下一个 */
+        }
+      }
+      if (!target || !stat) {
         res.writeHead(404)
         res.end('not found')
         return
