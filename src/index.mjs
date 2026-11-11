@@ -27,20 +27,20 @@ const ASSET_ROOTS = [
 ]
 
 /**
- * 打日志。照抄 dsh-tts 的写法：宿主 logger 是 `(level, message)` 两参函数，
- * 拿不到就退回 console.log —— 否则平台差异一出现，插件就彻底静默（2026-11 踩过）。
+ * 打日志。
+ * 2026-11 实测：这个宿主的 `ctx.logger` 存在，但 info 级别不落 stdout（写去了别处），
+ * 所以"有 logger 就用 logger"等于静默——dsh-tts 那些能看到的 `[dsh-tts][info] …`
+ * 恰好是它的 console.log 兜底。这里改成**永远打 console.log**，
+ * 再把同一条转给宿主 logger（它要过滤就过滤，不影响可见性）。
  */
 function log(ctx, level, message) {
-  const host = ctx
+  const line = '[pet-whale][' + level + '] ' + message
+  console.log(line)
   try {
-    if (typeof host?.logger === 'function') {
-      host.logger(level, '[pet-whale] ' + message)
-      return
-    }
+    if (typeof ctx?.logger === 'function') ctx.logger(level, '[pet-whale] ' + message)
   } catch {
-    /* 落下去走 console */
+    /* 宿主 logger 不可用无所谓，console 已经打过了 */
   }
-  console.log('[pet-whale][' + level + '] ' + message)
 }
 const MIME = {
   '.js': 'application/javascript; charset=utf-8',
