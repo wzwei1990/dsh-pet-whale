@@ -42,9 +42,10 @@ export const name = 'pet-whale'
 export const inject = ['webServer']
 
 /**
- * 具名导出 apply：cordis 只在具名 apply 上应用模块的 `inject`。
- * 只导出 default 时 `ctx.webServer` 会抛 `cannot get property "webServer" without inject`
- * （2026-11 实测，对照 dsh-tts 的写法）。文件末尾同时保留 default 导出，供构建校验脚本使用。
+ * 具名导出 apply + 保留 default：cordis 若把入口当**裸函数**（default）解析，
+ * 模块级的 `inject` 不会被采纳 → 访问 ctx.webServer 抛
+ * `cannot get property "webServer" without inject`，或（加了兜底后）静默跳过、路由不注册。
+ * 所以把 inject/name 同时挂到函数对象上，两种解析方式都能读到（2026-11 实测）。
  */
 export function apply(ctx) {
   // 双保险：即使宿主/版本对 inject 的处理不同，也不让插件激活失败（大不了路由不挂）
@@ -140,5 +141,8 @@ export function apply(ctx) {
     /* 忽略 */
   }
 }
+
+// cordis 若把入口当裸函数解析，就从函数属性上读 inject/name
+apply.inject = inject
 
 export default apply
