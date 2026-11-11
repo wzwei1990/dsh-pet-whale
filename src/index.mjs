@@ -26,6 +26,22 @@ const ASSET_ROOTS = [
   resolve(process.env.DSH_HOME || join(homedir(), '.dsh'), 'dsh-pet', 'live2d'),
 ]
 
+/**
+ * 打日志。照抄 dsh-tts 的写法：宿主 logger 是 `(level, message)` 两参函数，
+ * 拿不到就退回 console.log —— 否则平台差异一出现，插件就彻底静默（2026-11 踩过）。
+ */
+function log(ctx, level, message) {
+  const host = ctx
+  try {
+    if (typeof host?.logger === 'function') {
+      host.logger(level, '[pet-whale] ' + message)
+      return
+    }
+  } catch {
+    /* 落下去走 console */
+  }
+  console.log('[pet-whale][' + level + '] ' + message)
+}
 const MIME = {
   '.js': 'application/javascript; charset=utf-8',
   '.mjs': 'application/javascript; charset=utf-8',
@@ -64,11 +80,7 @@ export function apply(ctx) {
   }
 
   if (!webServer?.register) {
-    try {
-      ctx?.logger?.('warn', '[pet-whale] 宿主未提供 webServer，跳过 /pet-whale/live2d 路由（自制模型将 404）')
-    } catch {
-      /* 忽略 */
-    }
+    log(ctx, 'warn', '宿主未提供 webServer，跳过 /pet-whale/live2d 路由（自制模型将 404）')
     return
   }
 
@@ -135,11 +147,7 @@ export function apply(ctx) {
     },
   })
 
-  try {
-    ctx?.logger?.('info', '[pet-whale] 已挂载 /pet-whale/live2d/*（自制 Live2D 模型资产）')
-  } catch {
-    /* 忽略 */
-  }
+  log(ctx, 'info', '已挂载 /pet-whale/live2d/*（自制 Live2D 模型资产）')
 }
 
 // cordis 若把入口当裸函数解析，就从函数属性上读 inject/name

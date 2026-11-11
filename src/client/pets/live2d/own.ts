@@ -40,10 +40,20 @@ export const live2dOwnPet: PetModule = {
   idleDrift: false,
   mount: (el) => {
     const base = readStore(BASE_KEY, '/pet-whale/live2d/own/')
-    const model = readStore(MODEL_KEY, 'Generated_artwork.p2lrt')
+    // 部署名是 own.p2lrt（package_assets.mjs 会把导出物统一改名成 <name>.p2lrt），
+    // 不要再写 PSD2Live 的导出原名 Generated_artwork.p2lrt——那样会 404、播放器起不来。
+    const model = readStore(MODEL_KEY, 'own.p2lrt')
     const canvas = document.createElement('canvas')
     canvas.className = 'pwh-p2l-canvas'
     canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none'
+    // p2l 运行时按 **canvas 的像素尺寸** 渲染（创建后不再自己改），只给 CSS 尺寸会停在 300×150 的默认值。
+    // 所以在 create 之前按显示尺寸 × dpr 设置 backing store（2026-11 实测：只设 CSS → 画布不变大）。
+    {
+      const dpr = Math.min(2, window.devicePixelRatio || 1)
+      const box = el.getBoundingClientRect()
+      canvas.width = Math.max(1, Math.round((box.width || 240) * dpr))
+      canvas.height = Math.max(1, Math.round((box.height || 380) * dpr))
+    }
     el.appendChild(canvas)
 
     let player: P2LPlayerLike | null = null
