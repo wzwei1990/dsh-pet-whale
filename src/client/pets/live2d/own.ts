@@ -30,8 +30,8 @@ const EXPRESSIONS = ['smile', 'sad', 'angry', 'surprised', 'shy', 'gloom'] as co
 
 export const live2dOwnPet: PetModule = {
   id: 'live2d-own',
-  name: { zh: '自定义模型', en: 'Custom Live2D' },
-  icon: '💠',
+  name: { zh: '大肥鱼', en: 'Big Fat Fish' },
+  icon: '🐟',
   html: '',
   css: `
     .pwh-p2l-canvas { outline: none; }

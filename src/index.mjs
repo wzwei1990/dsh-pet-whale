@@ -64,7 +64,7 @@ export function apply(ctx) {
 
   if (!webServer?.register) {
     try {
-      ctx?.logger?.('debug', '[pet-whale] 宿主未提供 webServer，跳过 /pet-whale/live2d 路由（自制模型将 404）')
+      ctx?.logger?.('warn', '[pet-whale] 宿主未提供 webServer，跳过 /pet-whale/live2d 路由（自制模型将 404）')
     } catch {
       /* 忽略 */
     }
@@ -72,7 +72,9 @@ export function apply(ctx) {
   }
 
   webServer.register({
-    kind: 'prefix',
+    // 形状对齐 dsh-tts（这个宿主上确认可用）：只给 path + handler。
+    // 之前多带了 kind:'prefix'，register 不生效 → 路由静默不存在，
+    // 于是选「自制模型」时 p2l.js / wasm / p2lrt 全 404、宠物直接不显示。
     path: '/pet-whale/live2d',
     handler: (req, res) => {
       const url = new URL(req.url ?? '/', 'http://localhost')
