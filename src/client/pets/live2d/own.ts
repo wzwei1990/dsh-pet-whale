@@ -75,6 +75,23 @@ export const live2dOwnPet: PetModule = {
     }
     el.appendChild(canvas)
 
+    // 挂载后把宠物容器夹回可视区：
+    // 核心按「上一只宠物」的尺寸算过位置，换成更大的宠物（240×380）后会往右下溢出，
+    // 实测右侧被切掉 56px（2026-11-12）。这里只修正越界，用户拖过就不动。
+    {
+      const root = el.parentElement
+      if (root) {
+        const box = root.getBoundingClientRect()
+        const margin = 8
+        if (box.right > window.innerWidth) {
+          root.style.left = Math.max(0, Math.round(window.innerWidth - box.width - margin)) + 'px'
+        }
+        if (box.bottom > window.innerHeight) {
+          root.style.top = Math.max(0, Math.round(window.innerHeight - box.height - margin)) + 'px'
+        }
+      }
+    }
+
     let player: P2LPlayerLike | null = null
     let disposed = false
     let mouthRaf = 0

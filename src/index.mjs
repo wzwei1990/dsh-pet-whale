@@ -140,7 +140,11 @@ export function apply(ctx) {
         'Content-Type': type,
         'Content-Length': stat.size,
         ETag: etag,
-        'Cache-Control': 'public, max-age=86400',
+        // 模型/运行时都要"改了能立刻生效"：
+        // 之前给的是 public, max-age=86400，浏览器会整整缓存一天，
+        // 换模型后桌宠仍加载旧文件（2026-11-12 实测：磁盘已是新模型，页面还是碎的旧版）。
+        // 用 no-cache + ETag：每次带 If-None-Match 来问一句，没变就 304，变了就重下。
+        'Cache-Control': 'no-cache',
         'Cross-Origin-Resource-Policy': 'same-origin',
       })
       createReadStream(target).pipe(res)
