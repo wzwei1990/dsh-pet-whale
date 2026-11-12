@@ -28,6 +28,25 @@ function readStore(key: string, fallback: string): string {
 /** 表情名 → 中文提示（PSD2Live 导出的是 smile/sad/angry/surprised/shy/gloom） */
 const EXPRESSIONS = ['smile', 'sad', 'angry', 'surprised', 'shy', 'gloom'] as const
 
+/**
+ * 按名字挑动作 id。
+ * p2l 的 `clips` 是**动作 id**，而 PSD2Live 用内置动作 seed 出来的 id 可能是 `motion_1/2/3`，
+ * 名字才是 Idle/Blink/Nod/Shake —— 硬编码 play('Idle') 会直接找不到（2026-11 实测：
+ * 重新 seed 后 clips 变成 motion_1..4，桌宠就不动了）。所以这里按 id 模糊匹配，再退回第一个。
+ */
+function pickClip(player: P2LPlayerLike, wanted: string): string | null {
+  const clips = player.clips ?? []
+  if (clips.length === 0) return null
+  const lower = wanted.toLowerCase()
+  return (
+    clips.find(id => id === wanted) ??
+    clips.find(id => id.toLowerCase() === lower) ??
+    clips.find(id => id.toLowerCase().includes(lower)) ??
+    clips[0] ??
+    null
+  )
+}
+
 export const live2dOwnPet: PetModule = {
   id: 'live2d-own',
   name: { zh: '大肥鱼', en: 'Big Fat Fish' },
@@ -65,9 +84,10 @@ export const live2dOwnPet: PetModule = {
 
     const onClick = (event: MouseEvent): void => {
       if (!player || event.button !== 0) return
-      // 命中部位：头 → 点头；其它 → 摇一摇，权当反馈
+      // 命中部位：头 → 点头；其它 → 摇一摇，权当反馈（按名字解析，见 pickClip）
       const hit = player.hitTest(event.clientX, event.clientY)
-      player.play(hit === 'Head' ? 'Nod' : 'Shake')
+      const clip = pickClip(player, hit === 'Head' ? 'Nod' : 'Shake')
+      if (clip !== null) player.play(clip)
     }
     const onMove = (event: PointerEvent): void => {
       if (!player) return
@@ -98,14 +118,18 @@ export const live2dOwnPet: PetModule = {
       try {
         player = await createP2LPlayer(canvas, { base, model })
         if (disposed) return
-        player.play('Idle')
+        const idle = pickClip(player, 'Idle')
+        if (idle !== null) player.play(idle)
         // 供外部（tts 驱动）使用
         ;(window as unknown as { __petWhaleP2L?: unknown }).__petWhaleP2L = {
           player,
           setMouth: (v: number) => {
             mouthTarget = Math.max(0, Math.min(1, Number(v) || 0))
           },
-          play: (id: string) => player?.play(id),
+          play: (id: string) => {
+            const clip = pickClip(player as P2LPlayerLike, id)
+            if (clip !== null) player?.play(clip)
+          },
           expression: (id: string) => player?.expression(id),
           expressions: [...EXPRESSIONS],
         }
