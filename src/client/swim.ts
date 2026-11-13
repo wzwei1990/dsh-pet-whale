@@ -31,7 +31,11 @@ const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.
 const MAX_PARTICLES = 40
 
 /** 获取或创建独立的全屏固定粒子层（挂在 body 下，避免随鲸鱼 root 位移） */
+/** 人形 Live2D 宠物关闭游泳特效（水花/气泡/纸屑）时为 true，由 WhaleSwimmer 构造时写入 */
+let whaleEffectsDisabled = false
+
 export function getOrCreateParticleLayer(): HTMLElement | null {
+  if (whaleEffectsDisabled) return null
   if (typeof document === 'undefined') return null
   let layer = document.querySelector<HTMLElement>('[data-dsh-whale-particles]')
   if (!layer) {
@@ -70,6 +74,8 @@ export class WhaleSwimmer {
   private hasSplashedThisSession = false
 
   constructor(ctx: SwimContext) {
+    // 当前宠物 id 写在 root.dataset.pet 上；人形 Live2D 宠物不要鲸鱼的游泳特效
+    whaleEffectsDisabled = (ctx.root.dataset.pet ?? '').startsWith('live2d')
     this.ctx = ctx
     this.ctx.root.dataset.facing = this.facing
     this.loadState()

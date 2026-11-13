@@ -62,6 +62,9 @@ export const live2dOwnPet: PetModule = {
     // 部署名是 own.p2lrt（package_assets.mjs 会把导出物统一改名成 <name>.p2lrt），
     // 不要再写 PSD2Live 的导出原名 Generated_artwork.p2lrt——那样会 404、播放器起不来。
     const model = readStore(MODEL_KEY, 'own.p2lrt')
+    // 重复 mount（拖拽/切宠后重挂）会残留旧 canvas → 画面上叠出"第二个模型"，
+    // 所以挂载前先清掉同容器里已有的 p2l 画布。
+    for (const old of Array.from(el.querySelectorAll('canvas.pwh-p2l-canvas'))) old.remove()
     const canvas = document.createElement('canvas')
     canvas.className = 'pwh-p2l-canvas'
     canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none'
@@ -99,24 +102,61 @@ export const live2dOwnPet: PetModule = {
     let mouthValue = 0
     let tts: TtsBridge | null = null
 
+    // ===== 精灵动作层（点头）：整图序列帧，播放期间淡出 Live2D 画面 =====
+    // 为什么不用模型变形：这套自动 rig 在幅度稍大时会把层扯开（腰/手臂处露缝）。
+    // 精灵帧是整图，不存在层间断缝，配合 120ms 淡入淡出观感最稳。
+    const sprite = document.createElement('img')
+    sprite.className = 'pwh-p2l-sprite'
+    sprite.style.cssText =
+      'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;opacity:0;transition:opacity 120ms ease'
+    sprite.alt = ''
+    el.appendChild(sprite)
+    const NOD_FRAMES: HTMLImageElement[] = [1, 2, 3, 4, 5].map((i) => {
+      const img = new Image()
+      img.src = `${base}sprites/nod_${i}.png`
+      return img
+    })
+    let spriteTimer = 0
+    const playSprite = (frames: HTMLImageElement[]): void => {
+      if (disposed || frames.length === 0) return
+      window.clearTimeout(spriteTimer)
+      canvas.style.transition = 'opacity 120ms ease'
+      canvas.style.opacity = '0'
+      let i = 0
+      const step = (): void => {
+        if (disposed) return
+        sprite.src = frames[Math.min(i, frames.length - 1)].src
+        sprite.style.opacity = '1'
+        i += 1
+        if (i < frames.length) {
+          spriteTimer = window.setTimeout(step, 80)
+        } else {
+          spriteTimer = window.setTimeout(() => {
+            sprite.style.opacity = '0'
+            canvas.style.opacity = '1'
+          }, 90)
+        }
+      }
+      step()
+    }
+
     const onClick = (event: MouseEvent): void => {
       if (!player || event.button !== 0) return
       // 命中部位：头 → 点头；其它 → 摇一摇，权当反馈（按名字解析，见 pickClip）
       const hit = player.hitTest(event.clientX, event.clientY)
-      const clip = pickClip(player, hit === 'Head' ? 'Nod' : 'Shake')
+      // 点头部播精灵序列帧（整图，不会撕裂）；点其它部位仍用模型动作
+      if (hit === 'Head') {
+        playSprite(NOD_FRAMES)
+        return
+      }
+      const clip = pickClip(player, 'Shake')
       if (clip !== null) player.play(clip)
     }
-    const onMove = (event: PointerEvent): void => {
-      if (!player) return
-      const rect = canvas.getBoundingClientRect()
-      if (!rect.width || !rect.height) return
-      player.lookAt(((event.clientX - rect.left) / rect.width) * 2 - 1, 1 - ((event.clientY - rect.top) / rect.height) * 2)
-    }
-    const onLeave = (): void => player?.lookAt(0, 0)
+    // 视线跟随（lookAt）已停用：当前模型的头部形变在转动时会把头发/裙摆撕开
+    // （实测：鼠标一移动到模型上，头转 → 网格撕裂出白色缺口）。等绑定权重修好再开。
+    // const onMove = (event: PointerEvent): void => { ... player.lookAt(...) }
 
     el.addEventListener('click', onClick)
-    canvas.addEventListener('pointermove', onMove)
-    canvas.addEventListener('pointerleave', onLeave)
 
     // 口型平滑：外部（dsh-tts 等）设置 window 上的目标值，这里每帧逼近
     const stepMouth = (): void => {
