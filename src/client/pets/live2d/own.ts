@@ -206,8 +206,7 @@ export const live2dOwnPet: PetModule = {
       tts?.stop()
       tts = null
       el.removeEventListener('click', onClick)
-      canvas.removeEventListener('pointermove', onMove)
-      canvas.removeEventListener('pointerleave', onLeave)
+      // 视线跟随已停用（见下方说明），对应监听器也一并移除；这里不能再解绑 onMove/onLeave
       delete (window as unknown as { __petWhaleP2L?: unknown }).__petWhaleP2L
       canvas.remove()
       player = null
