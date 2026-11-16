@@ -35,10 +35,16 @@ try {
   const jsonStart = ["[", "{"].map((ch) => packText.indexOf(ch)).filter((n) => n >= 0).sort((a, b) => a - b)[0] ?? 0
   const parsedPack = JSON.parse(packText.slice(jsonStart))
   const packed = Array.isArray(parsedPack) ? parsedPack[0] : (parsedPack.files ? parsedPack : Object.values(parsedPack)[0])
+  // 包内文件白名单：
+  // - 入口/元数据：package.json、cordis.patch.yml、LICENSE、README、lib/index.mjs、lib/client.js
+  // - 资产：assets/<live2d|sprite|moc3>/ 下的任意嵌套文件（运行时、精灵帧、moc3 模型与图集）
+  //   资产由 Node 半的 /pet-whale/* 路由提供，必须随包分发；放行整棵资产树，
+  //   但仍拒绝 .. 路径段。
+  const META = /^(?:package\.json|cordis\.patch\.yml|LICENSE|README(?:\.en)?\.md|lib\/(?:index\.mjs|client\.js))$/
+  const ASSET = /^assets\/(?:live2d|sprite|moc3)\/(?:[^/\\]+\/)*[^/\\]+$/u
   for (const { path } of packed.files) {
-    // assets/live2d/** 是自制 Live2D 模型的运行时资产（p2l.js / wasm / .p2lrt），由 Node 半的
-    // /pet-whale/live2d/* 路由提供，必须随包分发；其余路径仍严格白名单。
-    assert.match(path, /^(?:package\.json|cordis\.patch\.yml|LICENSE|README(?:\.en)?\.md|lib\/(?:index\.mjs|client\.js)|assets\/live2d\/[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+)$/, `非预期文件进入包：${path}`)
+    const ok = META.test(path) || (ASSET.test(path) && !path.split('/').includes('..'))
+    assert.ok(ok, `非预期文件进入包：${path}`)
   }
   const consumer = join(temporary, 'consumer')
   mkdirSync(consumer)

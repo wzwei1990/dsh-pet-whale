@@ -15,7 +15,7 @@ export const moc3QfishPet = createMoc3Pet({
   id: 'moc3-qfish',
   name: { zh: '大肥鱼·团子', en: 'Dafeiyu Dumpling' },
   icon: '🍡',
-  pack: 'qfish',
+  pack: 'dafeiyu-dumpling',
   model: 'c_0120.model3.json',
   size: { w: 240, h: 240 },
 })
@@ -25,7 +25,7 @@ export const moc3FreePet = createMoc3Pet({
   id: 'moc3-free',
   name: { zh: '大肥鱼·鲸娘', en: 'Dafeiyu Whalemaid' },
   icon: '🐳',
-  pack: 'free',
+  pack: 'dafeiyu-whalemaid',
   model: '大肥鱼.model3.json',
   motionsPatch: 'motions.patch.json',
   size: { w: 200, h: 260 },

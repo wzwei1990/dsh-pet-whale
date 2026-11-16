@@ -18,7 +18,7 @@ import { animationOf, loadSpritePack, type SpritePack } from './manifest'
 import { createSpritePlayer, type SpritePlayer } from './player'
 
 /** 素材包路由（Node 半 src/index.mjs 挂的静态路由） */
-const PACK_BASE = '/pet-whale/sprite/dsh/'
+const PACK_BASE = '/pet-whale/sprite/dafeiyu-sprite/'
 
 /** 按清单字段随机取一个动作 id。 */
 function pickFromPool(pack: SpritePack, ids: string[] | undefined): string | undefined {
