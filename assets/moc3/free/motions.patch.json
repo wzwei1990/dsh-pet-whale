@@ -1,0 +1,138 @@
+{
+ "Motions": {
+  "Idle": [
+   {
+    "File": "Animation/IDLE.motion3.json"
+   }
+  ],
+  "举手切默认手": [
+   {
+    "File": "Animation/举手切默认手.motion3.json"
+   }
+  ],
+  "狗尾草切回默认手": [
+   {
+    "File": "Animation/狗尾草切回默认手.motion3.json"
+   }
+  ],
+  "狗尾草切换出来": [
+   {
+    "File": "Animation/狗尾草切换出来.motion3.json"
+   }
+  ],
+  "竖手指切出来动画": [
+   {
+    "File": "Animation/竖手指切出来动画.motion3.json"
+   }
+  ],
+  "竖手指切回默认": [
+   {
+    "File": "Animation/竖手指切回默认.motion3.json"
+   }
+  ],
+  "脱捕": [
+   {
+    "File": "Animation/脱捕.motion3.json"
+   }
+  ],
+  "默认手切举手": [
+   {
+    "File": "Animation/默认手切举手.motion3.json"
+   }
+  ]
+ },
+ "Expressions": [
+  {
+   "Name": "体型1",
+   "File": "Exp3/体型1.exp3.json"
+  },
+  {
+   "Name": "体型2",
+   "File": "Exp3/体型2.exp3.json"
+  },
+  {
+   "Name": "兔牙",
+   "File": "Exp3/兔牙.exp3.json"
+  },
+  {
+   "Name": "前倾",
+   "File": "Exp3/前倾.exp3.json"
+  },
+  {
+   "Name": "加载",
+   "File": "Exp3/加载.exp3.json"
+  },
+  {
+   "Name": "单片眼镜",
+   "File": "Exp3/单片眼镜.exp3.json"
+  },
+  {
+   "Name": "圈圈眼",
+   "File": "Exp3/圈圈眼.exp3.json"
+  },
+  {
+   "Name": "尾巴开关",
+   "File": "Exp3/尾巴开关.exp3.json"
+  },
+  {
+   "Name": "屑屑眼",
+   "File": "Exp3/屑屑眼.exp3.json"
+  },
+  {
+   "Name": "流冷汗",
+   "File": "Exp3/流冷汗.exp3.json"
+  },
+  {
+   "Name": "流泪",
+   "File": "Exp3/流泪.exp3.json"
+  },
+  {
+   "Name": "爱心眼",
+   "File": "Exp3/爱心眼.exp3.json"
+  },
+  {
+   "Name": "竖食指关",
+   "File": "Exp3/竖食指关.exp3.json"
+  },
+  {
+   "Name": "竖食指开",
+   "File": "Exp3/竖食指开.exp3.json"
+  },
+  {
+   "Name": "胸口衣服",
+   "File": "Exp3/胸口衣服.exp3.json"
+  },
+  {
+   "Name": "脱鞋",
+   "File": "Exp3/脱鞋.exp3.json"
+  },
+  {
+   "Name": "脸红",
+   "File": "Exp3/脸红.exp3.json"
+  },
+  {
+   "Name": "裙子切换",
+   "File": "Exp3/裙子切换.exp3.json"
+  },
+  {
+   "Name": "钢盆",
+   "File": "Exp3/钢盆.exp3.json"
+  },
+  {
+   "Name": "黑框眼镜",
+   "File": "Exp3/黑框眼镜.exp3.json"
+  },
+  {
+   "Name": "黑脸",
+   "File": "Exp3/黑脸.exp3.json"
+  },
+  {
+   "Name": "默认体型",
+   "File": "Exp3/默认体型.exp3.json"
+  },
+  {
+   "Name": "＞＜",
+   "File": "Exp3/＞＜.exp3.json"
+  }
+ ]
+}

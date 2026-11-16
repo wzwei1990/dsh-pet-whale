@@ -21,9 +21,20 @@ const here = dirname(fileURLToPath(import.meta.url))
  * 2. $DSH_HOME/dsh-pet/live2d      —— 从 GitHub 安装时的推荐位置：用户自己把
  *    {p2l.js, p2l_runtime.wasm, <name>.p2lrt} 丢进来即可，模型不必进仓库
  */
+const DSH_DIR = process.env.DSH_HOME || join(homedir(), '.dsh')
 const ASSET_ROOTS = [
   resolve(here, '../assets/live2d'),
-  resolve(process.env.DSH_HOME || join(homedir(), '.dsh'), 'dsh-pet', 'live2d'),
+  resolve(DSH_DIR, 'dsh-pet', 'live2d'),
+]
+/** 精灵帧素材根：包内 assets/sprite（默认 8 个动作）+ 用户目录 dsh-pet/sprite（可放全量 1040 个） */
+const SPRITE_ROOTS = [
+  resolve(here, '../assets/sprite'),
+  resolve(DSH_DIR, 'dsh-pet', 'sprite'),
+]
+/** moc3 素材根：包内 assets/moc3（只放运行时，模型体量大不入库）+ 用户目录 dsh-pet/moc3（放模型） */
+const MOC3_ROOTS = [
+  resolve(here, '../assets/moc3'),
+  resolve(DSH_DIR, 'dsh-pet', 'moc3'),
 ]
 
 /**
@@ -50,6 +61,7 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
   '.png': 'image/png',
+  '.webp': 'image/webp',
 }
 
 export const name = 'pet-whale'
@@ -84,74 +96,72 @@ export function apply(ctx) {
     return
   }
 
-  webServer.register({
-    // 形状对齐 dsh-tts（这个宿主上确认可用）：只给 path + handler。
-    // 之前多带了 kind:'prefix'，register 不生效 → 路由静默不存在，
-    // 于是选「自制模型」时 p2l.js / wasm / p2lrt 全 404、宠物直接不显示。
-    path: '/pet-whale/live2d',
-    handler: (req, res) => {
-      const url = new URL(req.url ?? '/', 'http://localhost')
-      let rel
+  /**
+   * 造一个静态文件 handler：只服务 roots 内的文件、只放行白名单扩展名、拒绝 ../ 穿越。
+   * 形状对齐 dsh-tts 上验证过的 register({ path, handler })——之前多带 kind:'prefix' 会静默不生效。
+   */
+  const staticHandler = (prefix, roots) => (req, res) => {
+    const url = new URL(req.url ?? '/', 'http://localhost')
+    let rel
+    try {
+      rel = decodeURIComponent(url.pathname.replace(new RegExp('^' + prefix), ''))
+    } catch {
+      res.writeHead(400)
+      res.end('bad path')
+      return
+    }
+
+    const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase()
+    const type = MIME[ext]
+    if (!type) {
+      res.writeHead(403)
+      res.end('forbidden type')
+      return
+    }
+
+    let target = null
+    let stat = null
+    for (const root of roots) {
+      const candidate = normalize(join(root, rel))
+      if (!candidate.startsWith(root + sep) && candidate !== root) continue
       try {
-        rel = decodeURIComponent(url.pathname.replace(/^\/pet-whale\/live2d/, ''))
+        const s = statSync(candidate)
+        if (!s.isFile()) continue
+        target = candidate
+        stat = s
+        break
       } catch {
-        res.writeHead(400)
-        res.end('bad path')
-        return
+        /* 这个根里没有，试下一个 */
       }
+    }
+    if (!target || !stat) {
+      res.writeHead(404)
+      res.end('not found')
+      return
+    }
 
-      const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase()
-      const type = MIME[ext]
-      if (!type) {
-        res.writeHead(403)
-        res.end('forbidden type')
-        return
-      }
+    const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, { ETag: etag })
+      res.end()
+      return
+    }
+    res.writeHead(200, {
+      'Content-Type': type,
+      'Content-Length': stat.size,
+      ETag: etag,
+      // 换素材后要能立刻生效：no-cache + ETag（未变 304，变了重下）
+      'Cache-Control': 'no-cache',
+      'Cross-Origin-Resource-Policy': 'same-origin',
+    })
+    createReadStream(target).pipe(res)
+  }
 
-      // 依次在包内 / 用户目录里找；都找不到才 404
-      let target = null
-      let stat = null
-      for (const root of ASSET_ROOTS) {
-        const candidate = normalize(join(root, rel))
-        if (!candidate.startsWith(root + sep) && candidate !== root) continue
-        try {
-          const s = statSync(candidate)
-          if (!s.isFile()) continue
-          target = candidate
-          stat = s
-          break
-        } catch {
-          /* 这个根里没有，试下一个 */
-        }
-      }
-      if (!target || !stat) {
-        res.writeHead(404)
-        res.end('not found')
-        return
-      }
+  webServer.register({ path: '/pet-whale/live2d', handler: staticHandler('/pet-whale/live2d', ASSET_ROOTS) })
+  webServer.register({ path: '/pet-whale/sprite', handler: staticHandler('/pet-whale/sprite', SPRITE_ROOTS) })
+  webServer.register({ path: '/pet-whale/moc3', handler: staticHandler('/pet-whale/moc3', MOC3_ROOTS) })
 
-      const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`
-      if (req.headers['if-none-match'] === etag) {
-        res.writeHead(304, { ETag: etag })
-        res.end()
-        return
-      }
-      res.writeHead(200, {
-        'Content-Type': type,
-        'Content-Length': stat.size,
-        ETag: etag,
-        // 模型/运行时都要"改了能立刻生效"：
-        // 之前给的是 public, max-age=86400，浏览器会整整缓存一天，
-        // 换模型后桌宠仍加载旧文件（2026-11-12 实测：磁盘已是新模型，页面还是碎的旧版）。
-        // 用 no-cache + ETag：每次带 If-None-Match 来问一句，没变就 304，变了就重下。
-        'Cache-Control': 'no-cache',
-        'Cross-Origin-Resource-Policy': 'same-origin',
-      })
-      createReadStream(target).pipe(res)
-    },
-  })
-
-  log(ctx, 'info', '已挂载 /pet-whale/live2d/*（自制 Live2D 模型资产）')
+  log(ctx, 'info', '已挂载 /pet-whale/live2d/*、/pet-whale/sprite/*、/pet-whale/moc3/*（模型/精灵帧/Cubism 运行时）')
 }
 
 // cordis 若把入口当裸函数解析，就从函数属性上读 inject/name

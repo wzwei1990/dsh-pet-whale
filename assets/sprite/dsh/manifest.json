@@ -1,0 +1,125 @@
+{
+ "schemaVersion": 1,
+ "id": "dsh-sprite",
+ "name": "大肥鱼·精灵",
+ "canvasWidth": 640,
+ "canvasHeight": 360,
+ "idleAnimationId": "idle",
+ "click": {
+  "animationIds": [
+   "click-tsundere",
+   "click-wave"
+  ],
+  "strategy": "random"
+ },
+ "hover": {
+  "animationIds": [
+   "click-wave"
+  ],
+  "strategy": "random"
+ },
+ "movement": {
+  "leftAnimationId": "walk-crab",
+  "rightAnimationId": "walk-crab",
+  "dragAnimationId": "drag",
+  "speed": 40
+ },
+ "animations": [
+  {
+   "id": "idle",
+   "name": "Idle",
+   "label": "待机呼吸休闲",
+   "file": "spritesheet/idle.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12
+  },
+  {
+   "id": "click-tsundere",
+   "name": "Tsundere",
+   "label": "点击回应-傲娇生气",
+   "file": "spritesheet/click-tsundere.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12
+  },
+  {
+   "id": "click-wave",
+   "name": "Wave",
+   "label": "点击回应-元气挥手",
+   "file": "spritesheet/click-wave.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12
+  },
+  {
+   "id": "run-left",
+   "name": "Run Left",
+   "label": "原地左转奔跑",
+   "file": "spritesheet/run-left.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12
+  },
+  {
+   "id": "float-step",
+   "name": "Float Step",
+   "label": "原地漂浮踏步",
+   "file": "spritesheet/float-step.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12
+  },
+  {
+   "id": "juggle",
+   "name": "Juggle",
+   "label": "三球抛接",
+   "file": "spritesheet/juggle.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12
+  },
+  {
+   "id": "walk-crab",
+   "name": "Walk",
+   "label": "螃蟹走路",
+   "file": "spritesheet/walk-crab.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12
+  },
+  {
+   "id": "drag",
+   "name": "Drag",
+   "label": "被鼠标拖拽悬空反馈",
+   "file": "spritesheet/drag.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12
+  }
+ ]
+}

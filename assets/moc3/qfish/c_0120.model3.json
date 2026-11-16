@@ -1,0 +1,253 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "c_0120.moc3",
+		"Textures": [
+			"c_0120.2048/texture_00.png",
+			"c_0120.2048/texture_01.png"
+		],
+		"Physics": "c_0120.physics3.json",
+		"DisplayInfo": "c_0120.cdi3.json",
+		"Motions": {
+			"FirstImpression": [
+				{
+					"File": "motions/FirstImpression.motion3.json",
+					"FadeInTime": 1.0,
+					"FadeOutTime": 1.0
+				}
+			],
+			"Idling": [
+				{
+					"File": "motions/idle.motion3.json",
+					"FadeInTime": 1.0,
+					"FadeOutTime": 1.0
+				}
+			],
+			"Touch": [
+				{
+					"File": "motions/Touch_0.motion3.json"
+				},
+				{
+					"File": "motions/Touch_1.motion3.json"
+				},
+				{
+					"File": "motions/Touch_2.motion3.json"
+				}
+			],
+			"Scene": [],
+			"Action": [
+				{
+					"File": "motions/Action_0.motion3.json"
+				},
+				{
+					"File": "motions/Action_1.motion3.json"
+				},
+				{
+					"File": "motions/Action_2.motion3.json"
+				},
+				{
+					"File": "motions/Action_3.motion3.json"
+				},
+				{
+					"File": "motions/Action_4.motion3.json"
+				},
+				{
+					"File": "motions/Action_5.motion3.json"
+				}
+			]
+		},
+		"Expressions": [
+			{
+				"Name": "love_eyes",
+				"File": "expressions/love_eyes.exp3.json"
+			},
+			{
+				"Name": "blush",
+				"File": "expressions/blush.exp3.json"
+			},
+			{
+				"Name": "angry",
+				"File": "expressions/angry.exp3.json"
+			},
+			{
+				"Name": "cry",
+				"File": "expressions/cry.exp3.json"
+			},
+			{
+				"Name": "star_eyes",
+				"File": "expressions/star_eyes.exp3.json"
+			},
+			{
+				"Name": "dizzy",
+				"File": "expressions/dizzy.exp3.json"
+			},
+			{
+				"Name": "drool",
+				"File": "expressions/drool.exp3.json"
+			},
+			{
+				"Name": "excited",
+				"File": "expressions/excited.exp3.json"
+			},
+			{
+				"Name": "sad",
+				"File": "expressions/sad.exp3.json"
+			},
+			{
+				"Name": "playful",
+				"File": "expressions/playful.exp3.json"
+			},
+			{
+				"Name": "gloomy",
+				"File": "expressions/gloomy.exp3.json"
+			},
+			{
+				"Name": "question",
+				"File": "expressions/question.exp3.json"
+			},
+			{
+				"Name": "sweat",
+				"File": "expressions/sweat.exp3.json"
+			},
+			{
+				"Name": "tongue",
+				"File": "expressions/tongue.exp3.json"
+			},
+			{
+				"Name": "soul_out",
+				"File": "expressions/soul_out.exp3.json"
+			},
+			{
+				"Name": "heartbeat",
+				"File": "expressions/heartbeat.exp3.json"
+			},
+			{
+				"Name": "flowers",
+				"File": "expressions/flowers.exp3.json"
+			},
+			{
+				"Name": "omurice",
+				"File": "expressions/omurice.exp3.json"
+			},
+			{
+				"Name": "sunglasses",
+				"File": "expressions/sunglasses.exp3.json"
+			},
+			{
+				"Name": "round_glasses",
+				"File": "expressions/round_glasses.exp3.json"
+			},
+			{
+				"Name": "square_glasses",
+				"File": "expressions/square_glasses.exp3.json"
+			},
+			{
+				"Name": "oval_glasses",
+				"File": "expressions/oval_glasses.exp3.json"
+			},
+			{
+				"Name": "cat_sticker",
+				"File": "expressions/cat_sticker.exp3.json"
+			},
+			{
+				"Name": "bunny_sticker",
+				"File": "expressions/bunny_sticker.exp3.json"
+			},
+			{
+				"Name": "ribbon_sticker",
+				"File": "expressions/ribbon_sticker.exp3.json"
+			},
+			{
+				"Name": "whale",
+				"File": "expressions/whale.exp3.json"
+			},
+			{
+				"Name": "whale_on_desk",
+				"File": "expressions/whale_on_desk.exp3.json"
+			},
+			{
+				"Name": "dark_cloth",
+				"File": "expressions/dark_cloth.exp3.json"
+			},
+			{
+				"Name": "phone_color",
+				"File": "expressions/phone_color.exp3.json"
+			},
+			{
+				"Name": "claw",
+				"File": "expressions/claw.exp3.json"
+			},
+			{
+				"Name": "claw_color",
+				"File": "expressions/claw_color.exp3.json"
+			},
+			{
+				"Name": "undo",
+				"File": "expressions/undo.exp3.json"
+			},
+			{
+				"Name": "eraser",
+				"File": "expressions/eraser.exp3.json"
+			},
+			{
+				"Name": "brush",
+				"File": "expressions/brush.exp3.json"
+			},
+			{
+				"Name": "order_press",
+				"File": "expressions/order_press.exp3.json"
+			},
+			{
+				"Name": "parfait",
+				"File": "expressions/parfait.exp3.json"
+			},
+			{
+				"Name": "squeeze",
+				"File": "expressions/squeeze.exp3.json"
+			},
+			{
+				"Name": "blank_eyes",
+				"File": "expressions/blank_eyes.exp3.json"
+			},
+			{
+				"Name": "double_peace",
+				"File": "expressions/double_peace.exp3.json"
+			},
+			{
+				"Name": "side_ponytail",
+				"File": "expressions/side_ponytail.exp3.json"
+			},
+			{
+				"Name": "headband",
+				"File": "expressions/headband.exp3.json"
+			},
+			{
+				"Name": "paw",
+				"File": "expressions/paw.exp3.json"
+			},
+			{
+				"Name": "exclaim",
+				"File": "expressions/exclaim.exp3.json"
+			},
+			{
+				"Name": "love",
+				"File": "expressions/love.exp3.json"
+			}
+		]
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": [
+				"ParamEyeLOpen",
+				"ParamEyeROpen"
+			]
+		},
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": []
+		}
+	]
+}

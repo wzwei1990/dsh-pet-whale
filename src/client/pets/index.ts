@@ -2,7 +2,8 @@
 import type { PetModule } from './types'
 import { catPet } from './cat'
 import { lingerPet } from './linger'
-import { live2dOwnPet } from './live2d/own'
+import { moc3FreePet, moc3QfishPet } from './moc3/pets'
+import { spritePet } from './sprite'
 import { whalePet } from './whale'
 
 export type { PetModule } from './types'
@@ -12,7 +13,7 @@ export type { PetModule } from './types'
  * 注：原来的 `live2d`（Haru 官方样例）已下线——它的模型资源从未随包分发，选了也是空白。
  * 现在唯一的 Live2D 宠物是自制模型「大肥鱼」(live2dOwnPet)。
  */
-export const PETS: readonly PetModule[] = [whalePet, catPet, lingerPet, live2dOwnPet]
+export const PETS: readonly PetModule[] = [whalePet, catPet, lingerPet, spritePet, moc3QfishPet, moc3FreePet]
 
 /** 首次运行（或存储里的 id 失效）时用哪只 */
 export const DEFAULT_PET_ID = 'whale'
