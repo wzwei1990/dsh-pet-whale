@@ -257,8 +257,15 @@ export function apply(ctx: Context): () => void {
   /** 一倍大小时的占位，实际尺寸要乘当前缩放 */
   const BASE_W = 137
   const BASE_H = 101
-  const PET_W = () => BASE_W * scale
-  const PET_H = () => BASE_H * scale
+  // 尺寸必须读**根容器的真实渲染尺寸**：不同宠物盒子不一样（鲸鱼 137×101、精灵帧 240×135、
+  // 人形 104×140），把 BASE_* 当万能常量会让粒子/贴边/夹取全按鲸鱼的盒子算 ——
+  // 2026-11-17 用户反馈「扬尘位置不对」就是它导致的（落点算在了腰上）。
+  const rootBox = () => {
+    const r = root.getBoundingClientRect()
+    return { w: r.width || BASE_W * scale, h: r.height || BASE_H * scale }
+  }
+  const PET_W = () => rootBox().w
+  const PET_H = () => rootBox().h
   const petSize = () => ({ w: PET_W(), h: PET_H() })
   const clampPos = (x: number, y: number) => {
     const maxX = Math.max(0, window.innerWidth - PET_W())
@@ -2064,8 +2071,9 @@ export function apply(ctx: Context): () => void {
         swimmer.spawnWaterRipple(px + PET_W() / 2, py + PET_H() * 0.79, false)
       } else {
         // 非水生宠物：落地尘环 + 一团扬尘（不用水花：2026-11-16 用户反馈）
-        swimmer.spawnLandRing(px + PET_W() / 2, py + PET_H() * 0.9)
-        swimmer.spawnDust(px + PET_W() / 2, py + PET_H() * 0.93, 6)
+        const rect = pet.getBoundingClientRect()
+        swimmer.spawnLandRing(rect.left + rect.width / 2, rect.bottom - 2)
+        swimmer.spawnDust(rect.left + rect.width / 2, rect.bottom - 2, 6)
       }
       savePos()
       // 保持初始朝向不变

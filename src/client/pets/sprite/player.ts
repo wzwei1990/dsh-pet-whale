@@ -24,7 +24,7 @@ export interface SpritePlayer {
    * @param hold 播完后**定格在最后一帧**（不弹回 idle）；上游拖拽动画就是 playOnce 语义，
    *             悬空时保持被拎起的姿态，放下才切回 idle
    */
-  play: (id: string, once?: boolean, hold?: boolean) => void
+  play: (id: string, once?: boolean, hold?: boolean, from?: number) => void
   /** 当前动作 id（调试/日志） */
   current: () => string
   destroy: () => void
@@ -91,10 +91,12 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     return { scale, dx, dy }
   })()
 
+  const rate = Math.max(0.25, Math.min(4, pack.playbackRate ?? 1))
   const idleId = pack.idleAnimationId
   let current: SpriteAnimation = pack.animations.find((a) => a.id === idleId) as SpriteAnimation
   let once = false
   let hold = false
+  let startFrame = 0
   let startedAt = performance.now()
   let raf = 0
   let stopped = false
@@ -103,8 +105,9 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     if (stopped) return
     const img = images.get(current.id)
     const total = current.frameCount || current.columns * current.rows
-    const elapsed = ((now - startedAt) / 1000) * current.fps
-    if (once && elapsed >= total) {
+    const span = Math.max(1, total - startFrame)
+    const elapsed = ((now - startedAt) / 1000) * current.fps * rate
+    if (once && elapsed >= span) {
       if (hold) {
         // 定格：只画最后一帧，不推进时间（拖拽悬空期间保持姿态）
         const last = total - 1
@@ -125,10 +128,11 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
         once = false
         startedAt = now
       }
-    } else if (elapsed >= total) {
-      startedAt = now // 循环动作从头再来
+    } else if (elapsed >= span) {
+      startedAt = now // 循环动作从起手帧再来
     }
-    const frame = Math.floor(((now - startedAt) / 1000) * current.fps) % total
+    const passed = Math.floor(((now - startedAt) / 1000) * current.fps * rate)
+    const frame = startFrame + (passed % span)
     const c = frame % current.columns
     const r = Math.floor(frame / current.columns)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -150,12 +154,13 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   raf = requestAnimationFrame(draw)
 
   return {
-    play: (id, playOnce = false, holdLast = false) => {
+    play: (id, playOnce = false, holdLast = false, from = 0) => {
       const next = pack.animations.find((a) => a.id === id)
       if (!next) return
       current = next
       once = playOnce
       hold = holdLast
+      startFrame = Math.max(0, from ?? next.startFrame ?? 0)
       startedAt = performance.now()
     },
     current: () => current.id,

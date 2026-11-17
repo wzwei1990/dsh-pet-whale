@@ -22,7 +22,9 @@
   "leftAnimationId": "walk-crab",
   "rightAnimationId": "walk-crab",
   "dragAnimationId": "drag",
-  "speed": 40
+  "speed": 40,
+  "dragStartFrame": 11,
+  "note": "dragStartFrame 由脚本按「与静帧差异 >8」自动探测，改素材后重跑即可"
  },
  "animations": [
   {
@@ -35,7 +37,8 @@
    "frameWidth": 640,
    "frameHeight": 360,
    "frameCount": 120,
-   "fps": 12
+   "fps": 12,
+   "startFrame": 0
   },
   {
    "id": "click-tsundere",
@@ -47,7 +50,8 @@
    "frameWidth": 640,
    "frameHeight": 360,
    "frameCount": 120,
-   "fps": 12
+   "fps": 12,
+   "startFrame": 15
   },
   {
    "id": "click-wave",
@@ -59,7 +63,8 @@
    "frameWidth": 640,
    "frameHeight": 360,
    "frameCount": 120,
-   "fps": 12
+   "fps": 12,
+   "startFrame": 0
   },
   {
    "id": "run-left",
@@ -71,7 +76,8 @@
    "frameWidth": 640,
    "frameHeight": 360,
    "frameCount": 120,
-   "fps": 12
+   "fps": 12,
+   "startFrame": 16
   },
   {
    "id": "float-step",
@@ -83,7 +89,8 @@
    "frameWidth": 640,
    "frameHeight": 360,
    "frameCount": 120,
-   "fps": 12
+   "fps": 12,
+   "startFrame": 0
   },
   {
    "id": "juggle",
@@ -95,7 +102,8 @@
    "frameWidth": 640,
    "frameHeight": 360,
    "frameCount": 120,
-   "fps": 12
+   "fps": 12,
+   "startFrame": 21
   },
   {
    "id": "walk-crab",
@@ -107,7 +115,8 @@
    "frameWidth": 640,
    "frameHeight": 360,
    "frameCount": 120,
-   "fps": 12
+   "fps": 12,
+   "startFrame": 9
   },
   {
    "id": "drag",
@@ -119,7 +128,10 @@
    "frameWidth": 640,
    "frameHeight": 360,
    "frameCount": 120,
-   "fps": 12
+   "fps": 12,
+   "startFrame": 11
   }
- ]
+ ],
+ "playbackRate": 1.2,
+ "note": "playbackRate=1.2：源素材节奏偏慢（作者视频 10 秒/动作），整体加快 20% 观感更接近桌宠"
 }

@@ -600,7 +600,7 @@ body[data-pet-aquatic='false'] .pw-drag-drip {
   box-shadow: 0 0 8px rgba(178, 176, 170, 0.3);
   transform: translate(-50%, -50%) scale(0.35);
   animation: pw-landRing 0.42s ease-out forwards;
-  z-index: 2;
+  z-index: 1;
 }
 @keyframes pw-landRing {
   from { opacity: 0.85; transform: translate(-50%, -50%) scale(0.35); }
@@ -617,7 +617,7 @@ body[data-pet-aquatic='false'] .pw-drag-drip {
   background: radial-gradient(circle, rgba(186, 182, 174, 0.72) 0%, rgba(186, 182, 174, 0.28) 55%, transparent 100%);
   transform: translate(-50%, -50%);
   animation: pw-dustPuff var(--pw-du-dur, 0.75s) ease-out forwards;
-  z-index: 999;
+  z-index: 1;   /* 压在宠物下面：扬尘在脚后，不盖住角色 */
 }
 @keyframes pw-dustPuff {
   0%   { opacity: 0.9; transform: translate(-50%, -50%) scale(0.35); }

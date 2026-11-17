@@ -24,6 +24,12 @@ export interface SpriteAnimation {
   frameHeight: number
   frameCount: number
   fps: number
+  /**
+   * 起手帧：素材开头常有一段几乎静止的「保持帧」（实测 drag 前 11 帧与第 0 帧差异 <5.3，
+   * 第 11 帧才动）。从 0 播会显得慢半拍，这里记下脚本探测出的实际起播帧。
+   * 由 tools/detect-start-frame 那套规则生成（与静帧平均差 >8 的第一帧）。
+   */
+  startFrame?: number
 }
 
 /** 动作池（点击/悬停共用同一形状）。 */
@@ -37,6 +43,11 @@ export interface SpritePack {
   schemaVersion: number
   id: string
   name: string
+  /**
+   * 整体播放倍速（默认 1）。素材来自 10 秒/动作的慢节奏视频，
+   * 桌面宠物需要更利落的观感；1.2 表示 12fps 素材按 14.4fps 推进。
+   */
+  playbackRate?: number
   /** 精灵表画布尺寸（单帧尺寸） */
   canvasWidth: number
   canvasHeight: number
@@ -47,6 +58,11 @@ export interface SpritePack {
     leftAnimationId?: string
     rightAnimationId?: string
     dragAnimationId?: string
+    /**
+     * 拖拽动画的起手帧：素材开头常有几百毫秒的静止前摇（实测 drag.webp 前 10 帧
+     * 帧间差 <1，第 11 帧才动，12fps ≈ 0.83s），从第 0 帧播会「慢半拍」。
+     */
+    dragStartFrame?: number
     speed?: number
   }
   animations: SpriteAnimation[]

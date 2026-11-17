@@ -649,8 +649,9 @@ export class WhaleSwimmer {
       const dustGap = 420
       if (now - this.lastStreamBubbleTime > dustGap && progress > 0.08 && progress < 0.92) {
         this.lastStreamBubbleTime = now
-        const sz = this.ctx.petSize()
-        this.spawnDust(curX + sz.w / 2, curY + sz.h * 0.95, 3)
+        // 脚底：直接读宠物元素的真实矩形（盒子随宠物不同，百分比会算到腰上）
+        const rect = this.ctx.pet.getBoundingClientRect()
+        this.spawnDust(rect.left + rect.width / 2, rect.bottom - 2, 3)
       }
     }
 
