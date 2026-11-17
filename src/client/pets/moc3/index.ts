@@ -24,6 +24,8 @@ interface Moc3PetOptions {
   model: string
   /** 容器宽高比（CSS px） */
   size: { w: number; h: number }
+  /** 可选：宠物专属台词覆盖（大肥鱼口吻，见 ../dafeiyu/text.ts） */
+  text?: PetModule['text']
   /**
    * 可选：动作补丁（相对素材根）。有些模型（VTube Studio 导出的公皮）model3.json 里
    * Motions/Expressions 是空的，动作靠 VTS 自己的配置注册——补丁就是把那两段补回去。
@@ -127,6 +129,7 @@ export function createMoc3Pet(options: Moc3PetOptions): PetModule {
     id: options.id,
     name: options.name,
     icon: options.icon,
+    ...(options.text ? { text: options.text } : {}),
     html: '<div class="pwh-moc3-box"></div>',
     css: `
       .pwh-moc3-box { position: absolute; inset: 0; }

@@ -18,6 +18,11 @@ export interface SwimContext {
   isBusy: () => boolean
   /** 当前实际占位，随缩放变——粒子挂在全局层用视口坐标，必须按真尺寸算 */
   petSize: () => { w: number; h: number }
+  /**
+   * 当前宠物是否水生：水花/涟漪/气泡/滴水只对水生宠物出（鲸鱼）。
+   * 猫、人物、大肥鱼这类平面桌宠溅水花会非常违和——2026-11-16 用户实测反馈。
+   */
+  isAquatic: () => boolean
 }
 
 interface Point {
@@ -187,7 +192,9 @@ export class WhaleSwimmer {
     }
     if (this.disposed || !this.enabled) return
 
-    const wait = delay ?? (3000 + Math.random() * 3500)
+    // 巡航间隔：鲸鱼游得勤（3~6.5s），陆生宠物踱步要克制（7~13s），
+    // 否则在桌面上一直来回平移，像被风吹着走（2026-11-16 用户反馈「到处跑」）
+    const wait = delay ?? (this.ctx.isAquatic() ? 3000 + Math.random() * 3500 : 7000 + Math.random() * 6000)
     this.timerId = window.setTimeout(() => {
       this.timerId = undefined
       if (!this.enabled) return
@@ -227,7 +234,8 @@ export class WhaleSwimmer {
     this.currentPos = { x: curX, y: curY }
 
     // 22% 概率深潜，78% 概率常规巡航
-    this.currentMode = Math.random() < 0.22 ? 'dive' : 'cruise'
+    // 非水生宠物不做「下潜」：那是鲸鱼沉到水面下的动作，立绘会看起来突然下沉跑掉
+    this.currentMode = this.ctx.isAquatic() && Math.random() < 0.22 ? 'dive' : 'cruise'
 
     // 计算游动目标点与贝塞尔控制点
     const { target, cp1, cp2, duration } = this.planTrajectory(this.startPos, this.currentMode)
@@ -248,8 +256,8 @@ export class WhaleSwimmer {
       this.ctx.pet.classList.add('swimming-dive')
     }
 
-    // 偶发台词
-    if (Math.random() < 0.3) {
+    // 偶发台词：只说给水生宠物（"游一游"这种话对站立型宠物不成立）
+    if (this.ctx.isAquatic() && Math.random() < 0.3) {
       const strings = this.ctx.getStrings()
       this.ctx.showDialog(pick(strings.feedback.swim))
     }
@@ -262,7 +270,10 @@ export class WhaleSwimmer {
     const vw = typeof window !== 'undefined' ? window.innerWidth : 1440
     const vh = typeof window !== 'undefined' ? window.innerHeight : 900
 
-    const dist = mode === 'dive' ? (100 + Math.random() * 120) : (140 + Math.random() * 180)
+    const aquatic = this.ctx.isAquatic()
+    const dist = mode === 'dive'
+      ? (100 + Math.random() * 120)
+      : (aquatic ? 140 + Math.random() * 180 : 90 + Math.random() * 130)
     
     // 偏向屏幕中心或根据当前位置自然游动
     const cx = vw / 2
@@ -310,12 +321,15 @@ export class WhaleSwimmer {
       }
     }
 
-    const duration = Math.max(1600, Math.min(3600, actualDist * 14 + (mode === 'dive' ? 600 : 0)))
+    // 每像素耗时：鲸鱼 ~14ms（游得快），陆生 ~24ms（像一步一步走）
+    const msPerPx = this.ctx.isAquatic() ? 14 : 24
+    const duration = Math.max(1600, Math.min(aquatic ? 3600 : 5200, actualDist * msPerPx + (mode === 'dive' ? 600 : 0)))
     return { target, cp1, cp2, duration }
   }
 
   /** 产生尾部扩散水纹圈（挂在全局粒子层，视口绝对坐标，留出自然拖尾） */
   public spawnWaterRipple(x: number, y: number, isDive = false): void {
+    if (!this.ctx.isAquatic()) return
     if (typeof document === 'undefined' || this.prefersReducedMotion()) return
     const layer = getOrCreateParticleLayer()
     if (!layer) return
@@ -337,6 +351,7 @@ export class WhaleSwimmer {
 
   /** 产生游动流线微水泡（挂在全局粒子层，自然随洋流向上/向后漂移） */
   public spawnStreamBubble(x: number, y: number, isDive = false): void {
+    if (!this.ctx.isAquatic()) return
     if (typeof document === 'undefined' || this.prefersReducedMotion()) return
     const layer = getOrCreateParticleLayer()
     if (!layer) return
@@ -360,8 +375,28 @@ export class WhaleSwimmer {
     this.addParticle(bubble)
   }
 
+  /**
+   * 非水生宠物的落地反馈：一圈扩散的光环（取代鲸鱼那套水花）。
+   * 挂在全局粒子层、用 fixed 定位，不碰 pet 自身的 transform（拖拽会写 scaleX/rotate）。
+   */
+  public spawnLandRing(x: number, y: number): void {
+    if (typeof document === 'undefined' || this.prefersReducedMotion()) return
+    const layer = getOrCreateParticleLayer()
+    if (!layer) return
+    const ring = document.createElement('span')
+    ring.className = 'pw-land-ring'
+    const size = 26
+    ring.style.left = `${x}px`
+    ring.style.top = `${y}px`
+    ring.style.width = `${size}px`
+    ring.style.height = `${size * 0.45}px`
+    layer.appendChild(ring)
+    this.addParticle(ring)
+  }
+
   /** 产生破浪出水/翻滚飞溅微水花 */
   public spawnSplash(x: number, y: number, count = 5): void {
+    if (!this.ctx.isAquatic()) return
     if (typeof document === 'undefined' || this.prefersReducedMotion()) return
     const layer = getOrCreateParticleLayer()
     if (!layer) return
@@ -389,6 +424,7 @@ export class WhaleSwimmer {
 
   /** 产生悬空拖拽水滴下坠 */
   public spawnDrip(x: number, y: number): void {
+    if (!this.ctx.isAquatic()) return
     if (typeof document === 'undefined' || this.prefersReducedMotion()) return
     const layer = getOrCreateParticleLayer()
     if (!layer) return

@@ -386,6 +386,7 @@ export function apply(ctx: Context): () => void {
     showDialog,
     getStrings: () => strings,
     petSize,
+    isAquatic: () => activePet.aquatic === true,
     isBusy: () =>
       root.classList.contains(HIDDEN_CLASS) ||
       dragStart !== null ||
@@ -2025,8 +2026,13 @@ export function apply(ctx: Context): () => void {
       root.classList.remove('dragging')
       const px = parseFloat(root.style.left) || 0
       const py = parseFloat(root.style.top) || 0
-      swimmer.spawnSplash(px + PET_W() / 2, py + PET_H() * 0.79, 4)
-      swimmer.spawnWaterRipple(px + PET_W() / 2, py + PET_H() * 0.79, false)
+      if (activePet.aquatic === true) {
+        swimmer.spawnSplash(px + PET_W() / 2, py + PET_H() * 0.79, 4)
+        swimmer.spawnWaterRipple(px + PET_W() / 2, py + PET_H() * 0.79, false)
+      } else {
+        // 非水生宠物：给落地光环，不溅水花（2026-11-16 用户反馈）
+        swimmer.spawnLandRing(px + PET_W() / 2, py + PET_H() * 0.9)
+      }
       savePos()
       // 保持初始朝向不变
       root.dataset.facing = swimmer.currentFacing

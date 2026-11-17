@@ -578,6 +578,23 @@ export const BASE_CSS = `
 }
 
 /* 破浪跃水与着陆飞溅水滴 */
+/* ===== 非水生宠物的落地反馈 =====
+   鲸鱼落水有水花，站在桌面上的宠物不该溅水；给一个不接触 pet transform 的落地圈。 */
+.pw-land-ring {
+  position: fixed;
+  pointer-events: none;
+  border-radius: 50%;
+  border: 2px solid rgba(140, 170, 255, 0.55);
+  box-shadow: 0 0 10px rgba(140, 170, 255, 0.35);
+  transform: translate(-50%, -50%) scale(0.35);
+  animation: pw-landRing 0.42s ease-out forwards;
+  z-index: 2;
+}
+@keyframes pw-landRing {
+  from { opacity: 0.85; transform: translate(-50%, -50%) scale(0.35); }
+  to   { opacity: 0;    transform: translate(-50%, -50%) scale(1.25); }
+}
+
 .pw-splash-drop {
   position: absolute;
   pointer-events: none;

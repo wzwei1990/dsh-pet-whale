@@ -5,6 +5,8 @@ import type { PetModule } from '../types'
 import { WHALE_PET_CSS } from './styles'
 
 export const whalePet: PetModule = {
+  // 水生：水花/涟漪/气泡/拖拽滴水只对它生效（见 types.ts 的 aquatic）
+  aquatic: true,
   id: 'whale',
   name: { zh: '小鲸鱼', en: 'Whale' },
   icon: '🐳',

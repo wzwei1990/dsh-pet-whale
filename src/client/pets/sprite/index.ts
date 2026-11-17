@@ -14,6 +14,7 @@
  * @module dsh-pet/src/client/pets/sprite
  */
 import type { PetModule } from '../types'
+import { DAFEIYU_TEXT } from '../dafeiyu/text'
 import { animationOf, loadSpritePack, type SpritePack } from './manifest'
 import { createSpritePlayer, type SpritePlayer } from './player'
 
@@ -32,6 +33,7 @@ export const spritePet: PetModule = {
   id: 'sprite',
   name: { zh: '大肥鱼·精灵', en: 'Dafeiyu Sprite' },
   icon: '🐟',
+  text: DAFEIYU_TEXT,
   // html 只放一个占位盒；真正的绘制在 mount 里建 canvas
   html: '<div class="pwh-sprite-box"></div>',
   css: `
@@ -58,7 +60,8 @@ export const spritePet: PetModule = {
     let disposed = false
     let pack: SpritePack | null = null
     let observer: MutationObserver | null = null
-    let dragging = false
+    /** 状态同步函数（iload 完成后才会真正生效；先占位，避免加载前调用报错） */
+    let sync: () => void = () => {}
 
     const onClick = (): void => {
       if (!player || !pack) return
@@ -81,6 +84,7 @@ export const spritePet: PetModule = {
           return
         }
         player.play(pack.idleAnimationId)
+        sync()
       } catch (error) {
         // 素材没放好时不要静默空白：留一行提示，便于用户自查目录
         canvas.remove()
@@ -96,17 +100,29 @@ export const spritePet: PetModule = {
     el.addEventListener('click', onClick)
     el.addEventListener('mouseenter', onEnter)
 
-    // 拖拽状态由插件在容器上切 class，这里跟着切动作
-    observer = new MutationObserver(() => {
-      const now = el.classList.contains('dragging')
-      if (now === dragging) return
-      dragging = now
+    // 插件在容器上切 class（dragging / swimming），根上写 data-facing：
+    // 这里据此切换动作并做左右镜像——精灵帧是整帧序列，镜像靠 canvas scaleX 实现
+    const rootEl = el.closest('[data-dsh-whale]') as HTMLElement | null
+    sync = (): void => {
       if (!player || !pack) return
-      const dragId = pack.movement?.dragAnimationId
-      if (now && dragId) player.play(dragId)
-      else player.play(pack.idleAnimationId)
-    })
+      const dragging = el.classList.contains('dragging')
+      const moving = el.classList.contains('swimming')
+      if (dragging) {
+        const id = pack.movement?.dragAnimationId
+        if (id) player.play(id)
+      } else if (moving) {
+        const id = pack.movement?.leftAnimationId ?? pack.idleAnimationId
+        player.play(id)
+      } else {
+        player.play(pack.idleAnimationId)
+      }
+      const facing = rootEl?.dataset.facing
+      canvas.style.transform = facing === 'right' ? 'scaleX(-1)' : ''
+    }
+
+    observer = new MutationObserver(sync)
     observer.observe(el, { attributes: true, attributeFilter: ['class'] })
+    if (rootEl) observer.observe(rootEl, { attributes: true, attributeFilter: ['class', 'data-facing'] })
 
     return () => {
       disposed = true
