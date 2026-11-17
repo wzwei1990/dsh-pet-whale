@@ -16,6 +16,12 @@ export class WhaleSounds {
   private master: GainNode | null = null
   private muted: boolean
   private level: VolumeLevel
+  /**
+   * 是否正在"说话"（TTS 播报中）。
+   * 说话期间：总音量压低（duck），并跳过 bubble/trick/snack 这类互动小音，
+   * 避免和语音叠在一起听不清。错误音仍保留（该提醒的要提醒）。
+   */
+  private speaking = false
   private disposed = false
   private resuming = false
 
@@ -33,6 +39,24 @@ export class WhaleSounds {
     this.level = level
   }
 
+  /** 说话时把总音量压到 35%，说完恢复。 */
+  private applyGain(): void {
+    if (this.master === null) return
+    const base = VOLUME_GAIN[this.level]
+    this.master.gain.value = this.speaking ? base * 0.35 : base
+  }
+
+  /** 说话状态：供 TTS 播报期间调用。 */
+  setSpeaking(on: boolean): void {
+    if (this.speaking === on) return
+    this.speaking = on
+    this.applyGain()
+  }
+
+  get isSpeaking(): boolean {
+    return this.speaking
+  }
+
   get isMuted(): boolean {
     return this.muted
   }
@@ -43,7 +67,7 @@ export class WhaleSounds {
 
   setVolume(level: VolumeLevel): void {
     this.level = level
-    if (this.master !== null) this.master.gain.value = VOLUME_GAIN[level]
+    this.applyGain()
     try {
       localStorage.setItem(VOLUME_KEY, level)
     } catch {
@@ -104,6 +128,8 @@ export class WhaleSounds {
   }
 
   play(type: SoundType): void {
+    // 说话期间不叠互动小音（气泡/逗弄/零食），只留 work/celebrate/error 这类状态音
+    if (this.speaking && (type === 'bubble' || type === 'trick' || type === 'snack')) return
     if (this.muted) return
     try {
       const ctx = this.acquire()

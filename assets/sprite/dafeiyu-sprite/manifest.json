@@ -130,8 +130,69 @@
    "frameCount": 120,
    "fps": 12,
    "startFrame": 11
+  },
+  {
+   "id": "talk-mumble-screen",
+   "name": "Mumble at screen",
+   "label": "碎碎念-对屏碎碎念",
+   "file": "spritesheet/talk-mumble-screen.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 0
+  },
+  {
+   "id": "talk-mumble-daze",
+   "name": "Mumble in a daze",
+   "label": "碎碎念-发呆碎碎念",
+   "file": "spritesheet/talk-mumble-daze.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 21
+  },
+  {
+   "id": "talk-mumble-wipe",
+   "name": "Mumble while wiping",
+   "label": "碎碎念-擦桌碎碎念",
+   "file": "spritesheet/talk-mumble-wipe.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 18
+  },
+  {
+   "id": "talk-hum",
+   "name": "Humming",
+   "label": "悠闲哼歌",
+   "file": "spritesheet/talk-hum.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 11
   }
  ],
  "playbackRate": 1.2,
- "note": "playbackRate=1.2：源素材节奏偏慢（作者视频 10 秒/动作），整体加快 20% 观感更接近桌宠"
+ "note": "playbackRate=1.2；talk=说话时随机轮换的碎碎念/哼歌动作（整帧素材没有口型参数，说话靠轮换动作表现，真口型要等 moc3 那两只）",
+ "talk": {
+  "animationIds": [
+   "talk-mumble-screen",
+   "talk-mumble-daze",
+   "talk-mumble-wipe",
+   "talk-hum"
+  ],
+  "strategy": "random"
+ }
 }

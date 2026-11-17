@@ -105,27 +105,92 @@ export const spritePet: PetModule = {
     const rootEl = el.closest('[data-dsh-whale]') as HTMLElement | null
     let lastTarget = ''
     let lastOnce = false
+    let speaking = false
+    let lastTalk = ''
+
+    /** 从 talk 池里挑一段（尽量不和上一段重复）；池空则回落到 idle。 */
+    const pickTalk = (): string => {
+      const pool = (pack?.talk?.animationIds ?? []).filter((id) => pack?.animations.some((a) => a.id === id))
+      if (pool.length === 0) return pack?.idleAnimationId ?? ''
+      if (pool.length === 1) return pool[0] as string
+      const rest = pool.filter((id) => id !== lastTalk)
+      const picked = rest[Math.floor(Math.random() * rest.length)] ?? pool[0]
+      lastTalk = picked
+      return picked as string
+    }
+
+    const playTalk = (): void => {
+      if (!player) return
+      const id = pickTalk()
+      ;(window as unknown as { __pwhSpriteState?: unknown }).__pwhSpriteState = { speaking: true, anim: id }
+      if (!id) return
+      lastTarget = id
+      lastOnce = true
+      // 一句一段：播完接着挑下一段（不重复同一段），直到说话结束
+      player.play(id, true, false, undefined, () => {
+        if (speaking) playTalk()
+      })
+    }
+
     sync = (): void => {
       if (!player || !pack) return
       const dragging = rootEl?.classList.contains('dragging') === true || el.classList.contains('dragging')
       const moving = rootEl?.classList.contains('swimming') === true || el.classList.contains('swimming')
-      const target = dragging
-        ? (pack.movement?.dragAnimationId ?? '')
-        : moving
-          ? (pack.movement?.leftAnimationId ?? pack.idleAnimationId)
-          : pack.idleAnimationId
-      // 照上游 playOnce 语义：拖拽动画播一次并定格在末帧（悬空姿态），放下才回 idle
-      const once = dragging
-      if (target && (target !== lastTarget || once !== lastOnce)) {
-        lastTarget = target
-        lastOnce = once
-        player.play(target, once, once)
+      // 优先级：拖拽 > 说话 > 走动 > 待机
+      if (dragging) {
+        const target = pack.movement?.dragAnimationId ?? ''
+        if (target && (target !== lastTarget || !lastOnce)) {
+          lastTarget = target
+          lastOnce = true
+          player.play(target, true, true)
+        }
+        return
       }
-      // 朝向交给插件：swim.ts 会写 pet.style.transform = scaleX(±1)。
-      // 这里再镜像一次会出现「双镜像 + 拖拽朝向来回切」= 闪烁。
+      if (speaking) {
+        // 已经在说就不打断；没在说才起一段
+        if (!lastOnce || lastTarget === pack.idleAnimationId) playTalk()
+        return
+      }
+      const target = moving ? (pack.movement?.leftAnimationId ?? pack.idleAnimationId) : pack.idleAnimationId
+      ;(window as unknown as { __pwhSpriteState?: unknown }).__pwhSpriteState = { speaking: false, anim: target }
+      if (target && (target !== lastTarget || lastOnce)) {
+        lastTarget = target
+        lastOnce = false
+        player.play(target)
+      }
+      // 朝向交给插件：swim.ts 会写 pet.style.transform = scaleX(±1)
       canvas.style.transform = ''
     }
 
+    // ── 对外接口：dsh-tts 之后接进来只需要调用它 ──
+    //   window.__pwhSpeak.start()  → 开始说话（随机轮换碎碎念/哼歌，播完自动换下一段）
+    //   window.__pwhSpeak.stop()   → 说完回 idle
+    // 也可以派事件：document.dispatchEvent(new CustomEvent('pet-whale-speak', { detail: { on: true } }))
+    const setSpeaking = (on: boolean): void => {
+      speaking = on
+      ;(window as unknown as { __pwhSpriteState?: unknown }).__pwhSpriteState = {
+        speaking: on,
+        anim: on ? lastTarget : pack?.idleAnimationId ?? '',
+      }
+      if (on) playTalk()
+      else {
+        lastTarget = ''
+        lastOnce = false
+        if (player && pack) {
+          lastTarget = pack.idleAnimationId
+          player.play(pack.idleAnimationId)
+        }
+      }
+    }
+    ;(window as unknown as { __pwhSpeak?: { start: () => void; stop: () => void } }).__pwhSpeak = {
+      start: () => setSpeaking(true),
+      stop: () => setSpeaking(false),
+    }
+    const onSpeakEvent = (e: Event): void => {
+      const detail = (e as CustomEvent<{ on?: boolean }>).detail
+      setSpeaking(detail?.on === true)
+    }
+    document.addEventListener('pet-whale-speak', onSpeakEvent)
 
     observer = new MutationObserver(sync)
     observer.observe(el, { attributes: true, attributeFilter: ['class'] })
@@ -135,6 +200,8 @@ export const spritePet: PetModule = {
       disposed = true
       el.removeEventListener('click', onClick)
       el.removeEventListener('mouseenter', onEnter)
+      document.removeEventListener('pet-whale-speak', onSpeakEvent)
+      delete (window as unknown as { __pwhSpeak?: unknown }).__pwhSpeak
       observer?.disconnect()
       observer = null
       player?.destroy()

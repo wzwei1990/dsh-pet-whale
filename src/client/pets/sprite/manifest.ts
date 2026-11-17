@@ -52,6 +52,8 @@ export interface SpritePack {
   canvasWidth: number
   canvasHeight: number
   idleAnimationId: string
+  /** 说话时轮换的动作池（整帧素材没有口型参数，只能靠动作表现"在说话"） */
+  talk?: SpritePool
   click?: SpritePool
   hover?: SpritePool
   movement?: {

@@ -403,6 +403,7 @@ export function apply(ctx: Context): () => void {
         const kids = layer ? Array.from(layer.children).map((n) => (n as HTMLElement).className) : []
         const counts: Record<string, number> = {}
         for (const k of kids) counts[k] = (counts[k] ?? 0) + 1
+        const sprite = (window as unknown as { __pwhSpriteState?: { speaking?: boolean; anim?: string } }).__pwhSpriteState
         box.textContent = 'pet=' + activePet.id
           + ' aquatic=' + String(activePet.aquatic === true)
           + ' rootAquatic=' + (root.dataset.petAquatic ?? '-')
@@ -415,6 +416,13 @@ export function apply(ctx: Context): () => void {
   } catch {
     /* 诊断失败不影响功能 */
   }
+
+  // 说话期间压低/静默宠物音效（TTS 播报时调用；sprite 模块派发 pet-whale-speak 事件）
+  const onSpeakState = (event: Event): void => {
+    const detail = (event as CustomEvent<{ on?: boolean }>).detail
+    sounds.setSpeaking(detail?.on === true)
+  }
+  if (typeof document !== 'undefined') document.addEventListener('pet-whale-speak', onSpeakState)
 
   // ===== 游泳系统 =====
   const swimmer = new WhaleSwimmer({

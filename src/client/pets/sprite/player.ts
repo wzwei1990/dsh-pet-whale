@@ -24,7 +24,7 @@ export interface SpritePlayer {
    * @param hold 播完后**定格在最后一帧**（不弹回 idle）；上游拖拽动画就是 playOnce 语义，
    *             悬空时保持被拎起的姿态，放下才切回 idle
    */
-  play: (id: string, once?: boolean, hold?: boolean, from?: number) => void
+  play: (id: string, once?: boolean, hold?: boolean, from?: number, onEnd?: () => void) => void
   /** 当前动作 id（调试/日志） */
   current: () => string
   destroy: () => void
@@ -97,6 +97,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   let once = false
   let hold = false
   let startFrame = 0
+  let onEndCb: (() => void) | null = null
   let startedAt = performance.now()
   let raf = 0
   let stopped = false
@@ -121,7 +122,14 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
         raf = requestAnimationFrame(draw)
         return
       }
-      // 一次性动作播完 → 回 idle
+      // 一次性动作播完：先回调（说话轮换用它挑下一段），再决定是否回 idle
+      const cb = onEndCb
+      onEndCb = null
+      if (cb) {
+        cb()
+        raf = requestAnimationFrame(draw)
+        return
+      }
       const idle = pack.animations.find((a) => a.id === idleId)
       if (idle) {
         current = idle
@@ -154,12 +162,13 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   raf = requestAnimationFrame(draw)
 
   return {
-    play: (id, playOnce = false, holdLast = false, from = 0) => {
+    play: (id, playOnce = false, holdLast = false, from = 0, onEnd) => {
       const next = pack.animations.find((a) => a.id === id)
       if (!next) return
       current = next
       once = playOnce
       hold = holdLast
+      onEndCb = onEnd ?? null
       startFrame = Math.max(0, from ?? next.startFrame ?? 0)
       startedAt = performance.now()
     },
