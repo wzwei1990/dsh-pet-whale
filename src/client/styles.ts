@@ -578,6 +578,16 @@ export const BASE_CSS = `
 }
 
 /* 破浪跃水与着陆飞溅水滴 */
+/* ===== 非水生宠物：彻底禁用水类粒子（兜底） =====
+   swim.ts 里四个 spawn* 已按 isAquatic 门控，这一条是最后一道闸：
+   根上 data-pet-aquatic="false" 时，即使有遗漏路径生成了粒子也不显示。 */
+[data-dsh-whale][data-pet-aquatic='false'] .pw-water-ripple,
+[data-dsh-whale][data-pet-aquatic='false'] .pw-splash-drop,
+[data-dsh-whale][data-pet-aquatic='false'] .pw-stream-bubble,
+[data-dsh-whale][data-pet-aquatic='false'] .pw-drag-drip {
+  display: none !important;
+}
+
 /* ===== 非水生宠物的落地反馈 =====
    鲸鱼落水有水花，站在桌面上的宠物不该溅水；给一个不接触 pet transform 的落地圈。 */
 .pw-land-ring {

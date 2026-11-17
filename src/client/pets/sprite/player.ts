@@ -49,6 +49,43 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     ),
   )
 
+  /**
+   * 素材里角色并不铺满整帧（实测 idle 帧：x 213–425、y 63–329，占 640×360 的中间偏下），
+   * 直接铺满画布会让脚离容器底还有一段 → 和地面阴影之间有空隙，看着像“悬空”。
+   * 这里按 idle 首帧的 alpha 包围盒算一次映射：底部对齐画布底、水平居中、整体放大到占满高度。
+   */
+  const fit = (() => {
+    const idleAnim = pack.animations.find((a) => a.id === pack.idleAnimationId)
+    const img = idleAnim ? images.get(idleAnim.id) : undefined
+    if (!idleAnim || !img) return { scale: 1, dx: 0, dy: 0 }
+    const probe = document.createElement('canvas')
+    probe.width = idleAnim.frameWidth
+    probe.height = idleAnim.frameHeight
+    const pctx = probe.getContext('2d')
+    if (!pctx) return { scale: 1, dx: 0, dy: 0 }
+    pctx.drawImage(img, 0, 0, idleAnim.frameWidth, idleAnim.frameHeight, 0, 0, probe.width, probe.height)
+    const data = pctx.getImageData(0, 0, probe.width, probe.height).data
+    let x0 = probe.width, y0 = probe.height, x1 = -1, y1 = -1
+    for (let y = 0; y < probe.height; y++) {
+      for (let x = 0; x < probe.width; x++) {
+        if (data[(y * probe.width + x) * 4 + 3] > 24) {
+          if (x < x0) x0 = x
+          if (x > x1) x1 = x
+          if (y < y0) y0 = y
+          if (y > y1) y1 = y
+        }
+      }
+    }
+    if (x1 < 0) return { scale: 1, dx: 0, dy: 0 }
+    const bw = x1 - x0 + 1
+    const bh = y1 - y0 + 1
+    // 高度占满 96%，底部留 2% 当落地余量
+    const scale = (pack.canvasHeight * 0.96) / bh
+    const dx = pack.canvasWidth / 2 - (x0 + bw / 2) * scale
+    const dy = pack.canvasHeight - (y0 + bh) * scale - pack.canvasHeight * 0.02
+    return { scale, dx, dy }
+  })()
+
   const idleId = pack.idleAnimationId
   let current: SpriteAnimation = pack.animations.find((a) => a.id === idleId) as SpriteAnimation
   let once = false
@@ -83,10 +120,10 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
         r * current.frameHeight,
         current.frameWidth,
         current.frameHeight,
-        0,
-        0,
-        canvas.width,
-        canvas.height,
+        fit.dx,
+        fit.dy,
+        current.frameWidth * fit.scale,
+        current.frameHeight * fit.scale,
       )
     }
     raf = requestAnimationFrame(draw)

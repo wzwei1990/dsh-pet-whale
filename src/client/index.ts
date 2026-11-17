@@ -196,6 +196,8 @@ export function apply(ctx: Context): () => void {
    */
   const applyPet = (id: string): void => {
     const next = petOf(id)
+    // 兜底：即使某条路径漏了门控，非水生宠物的水花/涟漪/水滴也不该出现在屏幕上
+    root.dataset.petAquatic = next.aquatic === true ? 'true' : 'false'
     activePet = next
     savePetId(next.id)
     root.dataset.pet = next.id
