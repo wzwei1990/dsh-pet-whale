@@ -98,6 +98,11 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   let hold = false
   let startFrame = 0
   let onEndCb: (() => void) | null = null
+  /** 交叉淡入：切换动作时把上一帧叠在下面淡出，避免硬切（拖拽/状态切换的"闪一下"） */
+  const FADE_MS = 120
+  let fadeStart: number | null = null
+  let prevImg: HTMLImageElement | undefined
+  let prevFrame = 0
   let startedAt = performance.now()
   let raf = 0
   let stopped = false
@@ -144,6 +149,19 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     const c = frame % current.columns
     const r = Math.floor(frame / current.columns)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
+    // 交叉淡入：先把上一帧画满，再把当前帧按进度叠上去
+    const fade = fadeStart === null ? 1 : Math.min(1, (now - fadeStart) / FADE_MS)
+    if (fade < 1 && prevImg) {
+      const pc = prevFrame % current.columns
+      const pr = Math.floor(prevFrame / current.columns)
+      ctx.drawImage(
+        prevImg,
+        pc * current.frameWidth, pr * current.frameHeight,
+        current.frameWidth, current.frameHeight,
+        fit.dx, fit.dy, current.frameWidth * fit.scale, current.frameHeight * fit.scale,
+      )
+      ctx.globalAlpha = fade
+    }
     if (img) {
       ctx.drawImage(
         img,
@@ -157,6 +175,8 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
         current.frameHeight * fit.scale,
       )
     }
+    ctx.globalAlpha = 1
+    if (fade >= 1) fadeStart = null
     raf = requestAnimationFrame(draw)
   }
   raf = requestAnimationFrame(draw)
@@ -165,6 +185,14 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     play: (id, playOnce = false, holdLast = false, from = 0, onEnd) => {
       const next = pack.animations.find((a) => a.id === id)
       if (!next) return
+      if (next.id !== current.id) {
+        // 记下当前帧，切换后 120ms 内做交叉淡入
+        const elapsedNow = Math.floor(((performance.now() - startedAt) / 1000) * current.fps * rate)
+        const spanNow = Math.max(1, (current.frameCount || current.columns * current.rows) - startFrame)
+        prevImg = images.get(current.id)
+        prevFrame = startFrame + (elapsedNow % spanNow)
+        fadeStart = performance.now()
+      }
       current = next
       once = playOnce
       hold = holdLast

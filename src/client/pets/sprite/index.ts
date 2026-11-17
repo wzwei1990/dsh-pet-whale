@@ -21,6 +21,33 @@ import { createSpritePlayer, type SpritePlayer } from './player'
 /** 素材包路由（Node 半 src/index.mjs 挂的静态路由） */
 const PACK_BASE = '/pet-whale/sprite/dafeiyu-sprite/'
 
+/** 插件加在 .pet-official 上的状态 class（与 state.ts 的 WhaleState 对齐） */
+const STATE_CLASSES = ['think', 'working', 'celebrate', 'error', 'wait', 'disappointed'] as const
+
+/**
+ * 说话状态必须活在**模块级**而不是 mount 里：
+ * 桌宠隐藏时会卸载 mount，如果状态跟着组件走，取消隐藏后就不知道"还在说话"，
+ * 于是语音还在播、动作却回待机（2026-11-17 用户实测）。
+ */
+let speakingFlag = false
+let applySpeaking: ((on: boolean) => void) | null = null
+
+/** 事件监听只注册一次（HMR/重装载时先摘旧的） */
+function ensureSpeakListener(): void {
+  if (typeof document === 'undefined') return
+  const HOOK = '__pwhSpriteSpeakHook'
+  const host = window as unknown as Record<string, unknown>
+  const prev = host[HOOK] as EventListener | undefined
+  if (prev) document.removeEventListener('dsh:speaking', prev)
+  const handler: EventListener = (event) => {
+    const detail = (event as CustomEvent<{ on?: boolean }>).detail
+    speakingFlag = detail?.on === true
+    applySpeaking?.(speakingFlag)
+  }
+  host[HOOK] = handler
+  document.addEventListener('dsh:speaking', handler)
+}
+
 /** 按清单字段随机取一个动作 id。 */
 function pickFromPool(pack: SpritePack, ids: string[] | undefined): string | undefined {
   if (!ids || ids.length === 0) return undefined
@@ -119,6 +146,35 @@ export const spritePet: PetModule = {
       return picked as string
     }
 
+    /** 待机池：默认 [idleAnimationId]，可配多段轮换 */
+    const idlePool = (): string[] => {
+      const raw = pack?.idleAnimationIds ?? []
+      const valid = raw.filter((id) => pack?.animations.some((a) => a.id === id))
+      if (valid.length > 0) return valid
+      return pack ? [pack.idleAnimationId] : []
+    }
+    let idleRotateTimer = 0
+    const clearIdleRotate = (): void => {
+      if (idleRotateTimer !== 0) { clearTimeout(idleRotateTimer); idleRotateTimer = 0 }
+    }
+    /** 待机每 25s 换一段（还在待机才换） */
+    const scheduleIdleRotate = (): void => {
+      clearIdleRotate()
+      idleRotateTimer = window.setTimeout(() => {
+        idleRotateTimer = 0
+        if (!player || !pack || speaking) return
+        if (lastTarget !== pack.idleAnimationId && !idlePool().includes(lastTarget)) return
+        const pool = idlePool()
+        if (pool.length <= 1) return
+        const next = pool.find((id) => id !== lastTarget) ?? pool[0]
+        lastTarget = next ?? pack.idleAnimationId
+        lastOnce = false
+        player.play(lastTarget)
+        scheduleIdleRotate()
+      }, 25_000)
+    }
+    let lastIdlePick = ''
+
     const playTalk = (): void => {
       if (!player) return
       const id = pickTalk()
@@ -151,12 +207,32 @@ export const spritePet: PetModule = {
         if (!lastOnce || lastTarget === pack.idleAnimationId) playTalk()
         return
       }
-      const target = moving ? (pack.movement?.leftAnimationId ?? pack.idleAnimationId) : pack.idleAnimationId
+      // agent 状态（思考/工作/庆祝/出错…）优先于走动/待机
+      const running = STATE_CLASSES.find((name) => el.classList.contains(name))
+      const stateAnim = running ? pack.states?.[running] : undefined
+      const hasStateAnim = stateAnim !== undefined && pack.animations.some((a) => a.id === stateAnim)
+      let target = hasStateAnim
+        ? (stateAnim as string)
+        : moving ? (pack.movement?.leftAnimationId ?? pack.idleAnimationId) : pack.idleAnimationId
+      const enteringIdle = !hasStateAnim && !moving
+      if (enteringIdle) {
+        const pool = idlePool()
+        if (pool.length > 1) {
+          // 进入待机时随机换一段（避免永远从同一个呼吸动作开始）
+          const choices = pool.filter((id) => id !== lastIdlePick)
+          const picked = choices[Math.floor(Math.random() * choices.length)] ?? pool[0]
+          lastIdlePick = picked ?? pack.idleAnimationId
+          target = lastIdlePick
+        }
+      } else {
+        clearIdleRotate()
+      }
       ;(window as unknown as { __pwhSpriteState?: unknown }).__pwhSpriteState = { speaking: false, anim: target }
       if (target && (target !== lastTarget || lastOnce)) {
         lastTarget = target
         lastOnce = false
         player.play(target)
+        if (enteringIdle) scheduleIdleRotate()
       }
       // 朝向交给插件：swim.ts 会写 pet.style.transform = scaleX(±1)
       canvas.style.transform = ''
@@ -168,6 +244,7 @@ export const spritePet: PetModule = {
     // 也可以派事件：document.dispatchEvent(new CustomEvent('pet-whale-speak', { detail: { on: true } }))
     const setSpeaking = (on: boolean): void => {
       speaking = on
+      speakingFlag = on
       ;(window as unknown as { __pwhSpriteState?: unknown }).__pwhSpriteState = {
         speaking: on,
         anim: on ? lastTarget : pack?.idleAnimationId ?? '',
@@ -190,9 +267,11 @@ export const spritePet: PetModule = {
       const detail = (e as CustomEvent<{ on?: boolean }>).detail
       setSpeaking(detail?.on === true)
     }
-    // 只认生态里的中立事件（dsh-tts 播报时派发；其他语音源也能派同一个）：
-    //   音乐/语音开始时 → window.__pwhSpeak.start() 或派 dsh:speaking {on:true}
-    document.addEventListener('dsh:speaking', onSpeakEvent)
+    // 事件监听走模块级 ensureSpeakListener()（跨隐藏保留状态），这里只托管 setSpeaking
+    applySpeaking = setSpeaking
+    ensureSpeakListener()
+    // 重新挂载时如果语音还在播（隐藏期间开始的），立刻接上说话动作
+    if (speakingFlag) setSpeaking(true)
 
     observer = new MutationObserver(sync)
     observer.observe(el, { attributes: true, attributeFilter: ['class'] })
@@ -202,7 +281,8 @@ export const spritePet: PetModule = {
       disposed = true
       el.removeEventListener('click', onClick)
       el.removeEventListener('mouseenter', onEnter)
-      document.removeEventListener('dsh:speaking', onSpeakEvent)
+      clearIdleRotate()
+      applySpeaking = null
       delete (window as unknown as { __pwhSpeak?: unknown }).__pwhSpeak
       observer?.disconnect()
       observer = null

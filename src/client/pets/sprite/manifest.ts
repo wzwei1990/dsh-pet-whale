@@ -52,6 +52,17 @@ export interface SpritePack {
   canvasWidth: number
   canvasHeight: number
   idleAnimationId: string
+  /**
+   * 待机轮换池（可选）：待机时在这些动作里换着播，避免一直同一个呼吸动作。
+   * 用户 2026-11-17 要求把「擦桌碎碎念」「悠闲哼歌」从说话池挪到这里。
+   */
+  idleAnimationIds?: string[]
+  /**
+   * agent 状态 → 动作映射（思考/工作/庆祝/出错…）。
+   * 插件把状态 class 加在 .pet-official 上（idle/think/working/celebrate/error/wait/disappointed），
+   * 这里按映射切动作；缺项或文件不存在时回落 idle。
+   */
+  states?: Record<string, string>
   /** 说话时轮换的动作池（整帧素材没有口型参数，只能靠动作表现"在说话"） */
   talk?: SpritePool
   click?: SpritePool

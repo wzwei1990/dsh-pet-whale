@@ -182,6 +182,110 @@
    "frameCount": 120,
    "fps": 12,
    "startFrame": 11
+  },
+  {
+   "id": "state-celebrate",
+   "name": "Celebrate",
+   "label": "庆祝",
+   "file": "spritesheet/state-celebrate.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 27
+  },
+  {
+   "id": "state-think",
+   "name": "Thinking",
+   "label": "思考",
+   "file": "spritesheet/state-think.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 8
+  },
+  {
+   "id": "state-working",
+   "name": "Working",
+   "label": "忙碌",
+   "file": "spritesheet/state-working.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 16
+  },
+  {
+   "id": "state-wait",
+   "name": "Yawn",
+   "label": "等待",
+   "file": "spritesheet/state-wait.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 23
+  },
+  {
+   "id": "state-shy",
+   "name": "Shy",
+   "label": "失落",
+   "file": "spritesheet/state-shy.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 11
+  },
+  {
+   "id": "talk-deep",
+   "name": "Deep mumble",
+   "label": "深度碎碎念",
+   "file": "spritesheet/talk-deep.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 10
+  },
+  {
+   "id": "talk-food",
+   "name": "Talking about food",
+   "label": "问吃什么",
+   "file": "spritesheet/talk-food.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 2
+  },
+  {
+   "id": "talk-giggle",
+   "name": "Giggle",
+   "label": "咯咯笑",
+   "file": "spritesheet/talk-giggle.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 33
   }
  ],
  "playbackRate": 1.2,
@@ -190,9 +294,23 @@
   "animationIds": [
    "talk-mumble-screen",
    "talk-mumble-daze",
-   "talk-mumble-wipe",
-   "talk-hum"
+   "talk-deep",
+   "talk-food",
+   "talk-giggle"
   ],
   "strategy": "random"
- }
+ },
+ "states": {
+  "think": "state-think",
+  "working": "state-working",
+  "celebrate": "state-celebrate",
+  "error": "click-tsundere",
+  "wait": "state-wait",
+  "disappointed": "state-shy"
+ },
+ "idleAnimationIds": [
+  "idle",
+  "talk-mumble-wipe",
+  "talk-hum"
+ ]
 }
