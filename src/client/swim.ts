@@ -37,22 +37,10 @@ const MAX_PARTICLES = 40
 
 /** 获取或创建独立的全屏固定粒子层（挂在 body 下，避免随鲸鱼 root 位移） */
 /** 人形 Live2D 宠物关闭游泳特效（水花/气泡/纸屑）时为 true，由 WhaleSwimmer 构造时写入 */
-let whaleEffectsDisabled = false
-
-/**
- * 全局关掉水类粒子（水花/涟漪/气泡/滴水/彩屑之外的鲸鱼特效）。
- * 非水生宠物必须关掉——这是「连粒子层都不创建」的硬开关，
- * 比在每个 spawn* 里判断更彻底（2026-11-17 用户反馈：精灵帧上仍有水花）。
- */
-export function setWhaleEffectsDisabled(disabled: boolean): void {
-  whaleEffectsDisabled = disabled
-  if (!disabled) return
-  if (typeof document === 'undefined') return
-  document.querySelectorAll('[data-dsh-whale-particles]').forEach((layer) => layer.remove())
-}
+// 粒子层是通用的（水花、扬尘、彩屑共用），不按宠物整体开关；
+// 具体哪种粒子出现，由各 spawn* 自己按宠物类型决定。
 
 export function getOrCreateParticleLayer(): HTMLElement | null {
-  if (whaleEffectsDisabled) return null
   if (typeof document === 'undefined') return null
   let layer = document.querySelector<HTMLElement>('[data-dsh-whale-particles]')
   if (!layer) {
@@ -92,7 +80,6 @@ export class WhaleSwimmer {
 
   constructor(ctx: SwimContext) {
     // 当前宠物 id 写在 root.dataset.pet 上；人形 Live2D 宠物不要鲸鱼的游泳特效
-    whaleEffectsDisabled = (ctx.root.dataset.pet ?? '').startsWith('live2d')
     this.ctx = ctx
     this.ctx.root.dataset.facing = this.facing
     this.loadState()
@@ -406,6 +393,34 @@ export class WhaleSwimmer {
     this.addParticle(ring)
   }
 
+  /**
+   * 陆生宠物的扬尘：落地、迈步时脚下的一小撮灰白粉尘。
+   * 和水花是两种语义——水花只属于水生宠物（见 spawnSplash 的 isAquatic 门控），
+   * 陆生宠物用水花会很违和（2026-11-17 用户反馈）。
+   */
+  public spawnDust(x: number, y: number, count = 3): void {
+    if (typeof document === 'undefined' || this.prefersReducedMotion()) return
+    const layer = getOrCreateParticleLayer()
+    if (!layer) return
+    for (let i = 0; i < count; i++) {
+      const puff = document.createElement('span')
+      puff.className = 'pw-dust'
+      const size = 5 + Math.random() * 5
+      const dx = Math.random() * 26 - 13
+      const dy = -(6 + Math.random() * 10)
+      const dur = 0.42 + Math.random() * 0.22
+      puff.style.left = `${x + (Math.random() * 16 - 8)}px`
+      puff.style.top = `${y}px`
+      puff.style.width = `${size.toFixed(1)}px`
+      puff.style.height = `${size.toFixed(1)}px`
+      puff.style.setProperty('--pw-du-dx', `${dx.toFixed(1)}px`)
+      puff.style.setProperty('--pw-du-dy', `${dy.toFixed(1)}px`)
+      puff.style.setProperty('--pw-du-dur', `${dur.toFixed(2)}s`)
+      layer.appendChild(puff)
+      this.addParticle(puff)
+    }
+  }
+
   /** 产生破浪出水/翻滚飞溅微水花 */
   public spawnSplash(x: number, y: number, count = 5): void {
     if (!this.ctx.isAquatic()) return
@@ -598,26 +613,45 @@ export class WhaleSwimmer {
     const scaleY = scaleDepth
     this.ctx.root.style.left = `${curX}px`
     this.ctx.root.style.top = `${curY}px`
-    this.ctx.pet.style.transform = `scale(${scaleX}, ${scaleY}) rotate(${pitchDeg.toFixed(2)}deg)`
-    this.ctx.pet.style.opacity = `${depthOpacity.toFixed(3)}`
+    // 陆生宠物走的是「走路」不是「游动」：不随轨迹俯仰、不摆动、不做深度透明，
+    // 否则立绘会像鱼一样斜着飘过去（2026-11-17 用户反馈「还有游动的动作」）
+    const aquaticPose = this.ctx.isAquatic()
+    const posePitch = aquaticPose ? pitchDeg : 0
+    const poseOpacity = aquaticPose ? depthOpacity : 1
+    const poseScaleY = aquaticPose ? scaleY : 1
+    this.ctx.pet.style.transform = `scale(${scaleX}, ${poseScaleY}) rotate(${posePitch.toFixed(2)}deg)`
+    this.ctx.pet.style.opacity = `${poseOpacity.toFixed(3)}`
 
     // 计算尾巴在视口中的绝对发射坐标（固定挂在全屏粒子层，形成自然拖尾）
     const size = this.ctx.petSize()
     const tailX = curX + size.w * (this.facing === 'left' ? 112 / 137 : 25 / 137)
     const tailY = curY + size.h * 52 / 101
 
-    // 1. 水流尾波圈发射（每隔 260~320ms）
-    const rippleGap = isDive ? 220 : 300
-    if (now - this.lastRippleTime > rippleGap && progress > 0.08 && progress < 0.92) {
-      this.lastRippleTime = now
-      this.spawnWaterRipple(tailX, tailY, isDive)
-    }
+    // 粒子按宠物类型分流：
+    // 水生 → 尾迹涟漪 + 流线水泡（水花语义）
+    // 陆生 → 脚下扬尘（走路/挪步时扬起一点灰），不溅水
+    if (this.ctx.isAquatic()) {
+      // 1. 水流尾波圈发射（每隔 260~320ms）
+      const rippleGap = isDive ? 220 : 300
+      if (now - this.lastRippleTime > rippleGap && progress > 0.08 && progress < 0.92) {
+        this.lastRippleTime = now
+        this.spawnWaterRipple(tailX, tailY, isDive)
+      }
 
-    // 2. 尾迹流线水泡微粒发射（每隔 150~220ms）
-    const streamGap = isDive ? 140 : 200
-    if (now - this.lastStreamBubbleTime > streamGap && progress > 0.05 && progress < 0.95) {
-      this.lastStreamBubbleTime = now
-      this.spawnStreamBubble(tailX, tailY, isDive)
+      // 2. 尾迹流线水泡微粒发射（每隔 150~220ms）
+      const streamGap = isDive ? 140 : 200
+      if (now - this.lastStreamBubbleTime > streamGap && progress > 0.05 && progress < 0.95) {
+        this.lastStreamBubbleTime = now
+        this.spawnStreamBubble(tailX, tailY, isDive)
+      }
+    } else {
+      // 陆生：每 ~420ms 在脚下（容器底部中央）扬一小撮尘
+      const dustGap = 420
+      if (now - this.lastStreamBubbleTime > dustGap && progress > 0.08 && progress < 0.92) {
+        this.lastStreamBubbleTime = now
+        const sz = this.ctx.petSize()
+        this.spawnDust(curX + sz.w / 2, curY + sz.h * 0.96, 2)
+      }
     }
 
     // 3. 鲸鱼本体冒大泡泡

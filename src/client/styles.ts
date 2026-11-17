@@ -607,6 +607,21 @@ body[data-pet-aquatic='false'] .pw-drag-drip {
   to   { opacity: 0;    transform: translate(-50%, -50%) scale(1.25); }
 }
 
+/* 陆生宠物的扬尘（走路/挪步时脚下的小灰白粉尘） */
+.pw-dust {
+  position: fixed;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(190, 196, 210, 0.55) 0%, rgba(190, 196, 210, 0.18) 60%, transparent 100%);
+  transform: translate(-50%, -50%);
+  animation: pw-dustPuff var(--pw-du-dur, 0.5s) ease-out forwards;
+  z-index: 2;
+}
+@keyframes pw-dustPuff {
+  0%   { opacity: 0.75; transform: translate(-50%, -50%) scale(0.4); }
+  100% { opacity: 0;    transform: translate(calc(-50% + var(--pw-du-dx, 0px)), calc(-50% + var(--pw-du-dy, 0px))) scale(1.15); }
+}
+
 .pw-splash-drop {
   position: absolute;
   pointer-events: none;
