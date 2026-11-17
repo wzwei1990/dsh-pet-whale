@@ -11,7 +11,7 @@ import { WhaleDriver, type WhaleSnapshot, type WhaleState } from './state'
 import { PALETTES, applyPalette, loadPaletteId, paletteOf, savePaletteId } from './palettes'
 import { PETS, loadPetId, petOf, savePetId, type PetModule } from './pets'
 import { detectBrowserLocale, getStrings, paletteName, petName, type PetLocale, type PetStrings } from './i18n'
-import { WhaleSwimmer } from './swim'
+import { WhaleSwimmer, setWhaleEffectsDisabled } from './swim'
 import { currentSessionId, partialTextOf, partialHasToolCall, type SessionRow } from './host-snapshot'
 
 // 官方 client 通道的服务闸：等 sessions / locale / uiConversation / uiSession 服务就绪后再 apply。
@@ -197,7 +197,11 @@ export function apply(ctx: Context): () => void {
   const applyPet = (id: string): void => {
     const next = petOf(id)
     // 兜底：即使某条路径漏了门控，非水生宠物的水花/涟漪/水滴也不该出现在屏幕上
-    root.dataset.petAquatic = next.aquatic === true ? 'true' : 'false'
+    const aquatic = next.aquatic === true
+    root.dataset.petAquatic = aquatic ? 'true' : 'false'
+    if (typeof document !== 'undefined') document.body.dataset.petAquatic = aquatic ? 'true' : 'false'
+    // 硬开关：非水生连粒子层都不建（逐方法门控之外的第二道保险）
+    setWhaleEffectsDisabled(!aquatic)
     activePet = next
     savePetId(next.id)
     root.dataset.pet = next.id

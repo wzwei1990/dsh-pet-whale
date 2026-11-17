@@ -18,8 +18,13 @@ export interface SpritePlayerOptions {
 }
 
 export interface SpritePlayer {
-  /** 播一段动作；once=true 播完回 idle */
-  play: (id: string, once?: boolean) => void
+  /**
+   * 播一段动作。
+   * @param once 只播一次
+   * @param hold 播完后**定格在最后一帧**（不弹回 idle）；上游拖拽动画就是 playOnce 语义，
+   *             悬空时保持被拎起的姿态，放下才切回 idle
+   */
+  play: (id: string, once?: boolean, hold?: boolean) => void
   /** 当前动作 id（调试/日志） */
   current: () => string
   destroy: () => void
@@ -89,6 +94,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   const idleId = pack.idleAnimationId
   let current: SpriteAnimation = pack.animations.find((a) => a.id === idleId) as SpriteAnimation
   let once = false
+  let hold = false
   let startedAt = performance.now()
   let raf = 0
   let stopped = false
@@ -99,6 +105,19 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     const total = current.frameCount || current.columns * current.rows
     const elapsed = ((now - startedAt) / 1000) * current.fps
     if (once && elapsed >= total) {
+      if (hold) {
+        // 定格：只画最后一帧，不推进时间（拖拽悬空期间保持姿态）
+        const last = total - 1
+        const lc = last % current.columns
+        const lr = Math.floor(last / current.columns)
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        if (img) {
+          ctx.drawImage(img, lc * current.frameWidth, lr * current.frameHeight, current.frameWidth, current.frameHeight,
+            fit.dx, fit.dy, current.frameWidth * fit.scale, current.frameHeight * fit.scale)
+        }
+        raf = requestAnimationFrame(draw)
+        return
+      }
       // 一次性动作播完 → 回 idle
       const idle = pack.animations.find((a) => a.id === idleId)
       if (idle) {
@@ -131,11 +150,12 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   raf = requestAnimationFrame(draw)
 
   return {
-    play: (id, playOnce = false) => {
+    play: (id, playOnce = false, holdLast = false) => {
       const next = pack.animations.find((a) => a.id === id)
       if (!next) return
       current = next
       once = playOnce
+      hold = holdLast
       startedAt = performance.now()
     },
     current: () => current.id,

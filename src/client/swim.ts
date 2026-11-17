@@ -39,6 +39,18 @@ const MAX_PARTICLES = 40
 /** 人形 Live2D 宠物关闭游泳特效（水花/气泡/纸屑）时为 true，由 WhaleSwimmer 构造时写入 */
 let whaleEffectsDisabled = false
 
+/**
+ * 全局关掉水类粒子（水花/涟漪/气泡/滴水/彩屑之外的鲸鱼特效）。
+ * 非水生宠物必须关掉——这是「连粒子层都不创建」的硬开关，
+ * 比在每个 spawn* 里判断更彻底（2026-11-17 用户反馈：精灵帧上仍有水花）。
+ */
+export function setWhaleEffectsDisabled(disabled: boolean): void {
+  whaleEffectsDisabled = disabled
+  if (!disabled) return
+  if (typeof document === 'undefined') return
+  document.querySelectorAll('[data-dsh-whale-particles]').forEach((layer) => layer.remove())
+}
+
 export function getOrCreateParticleLayer(): HTMLElement | null {
   if (whaleEffectsDisabled) return null
   if (typeof document === 'undefined') return null

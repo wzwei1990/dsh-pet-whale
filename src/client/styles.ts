@@ -581,10 +581,12 @@ export const BASE_CSS = `
 /* ===== 非水生宠物：彻底禁用水类粒子（兜底） =====
    swim.ts 里四个 spawn* 已按 isAquatic 门控，这一条是最后一道闸：
    根上 data-pet-aquatic="false" 时，即使有遗漏路径生成了粒子也不显示。 */
-[data-dsh-whale][data-pet-aquatic='false'] .pw-water-ripple,
-[data-dsh-whale][data-pet-aquatic='false'] .pw-splash-drop,
-[data-dsh-whale][data-pet-aquatic='false'] .pw-stream-bubble,
-[data-dsh-whale][data-pet-aquatic='false'] .pw-drag-drip {
+/* 粒子层挂在 document.body 上（getOrCreateParticleLayer），所以选择器必须从 body 起：
+   之前写成 [data-dsh-whale] 后代选择器，永远匹配不到 → 兜底失效。 */
+body[data-pet-aquatic='false'] .pw-water-ripple,
+body[data-pet-aquatic='false'] .pw-splash-drop,
+body[data-pet-aquatic='false'] .pw-stream-bubble,
+body[data-pet-aquatic='false'] .pw-drag-drip {
   display: none !important;
 }
 

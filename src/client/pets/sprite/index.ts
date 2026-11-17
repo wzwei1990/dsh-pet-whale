@@ -100,25 +100,32 @@ export const spritePet: PetModule = {
     el.addEventListener('click', onClick)
     el.addEventListener('mouseenter', onEnter)
 
-    // 插件在容器上切 class（dragging / swimming），根上写 data-facing：
-    // 这里据此切换动作并做左右镜像——精灵帧是整帧序列，镜像靠 canvas scaleX 实现
+    // 插件的 dragging / swimming 都加在**根容器**上（endDrag 里 root.classList.remove('dragging')），
+    // 之前只查宠物元素的 class → 拖拽动画永远不触发（2026-11-17 实测：提起既不播动作也闪）。
     const rootEl = el.closest('[data-dsh-whale]') as HTMLElement | null
+    let lastTarget = ''
+    let lastOnce = false
     sync = (): void => {
       if (!player || !pack) return
-      const dragging = el.classList.contains('dragging')
-      const moving = el.classList.contains('swimming')
-      if (dragging) {
-        const id = pack.movement?.dragAnimationId
-        if (id) player.play(id)
-      } else if (moving) {
-        const id = pack.movement?.leftAnimationId ?? pack.idleAnimationId
-        player.play(id)
-      } else {
-        player.play(pack.idleAnimationId)
+      const dragging = rootEl?.classList.contains('dragging') === true || el.classList.contains('dragging')
+      const moving = rootEl?.classList.contains('swimming') === true || el.classList.contains('swimming')
+      const target = dragging
+        ? (pack.movement?.dragAnimationId ?? '')
+        : moving
+          ? (pack.movement?.leftAnimationId ?? pack.idleAnimationId)
+          : pack.idleAnimationId
+      // 照上游 playOnce 语义：拖拽动画播一次并定格在末帧（悬空姿态），放下才回 idle
+      const once = dragging
+      if (target && (target !== lastTarget || once !== lastOnce)) {
+        lastTarget = target
+        lastOnce = once
+        player.play(target, once, once)
       }
-      const facing = rootEl?.dataset.facing
-      canvas.style.transform = facing === 'right' ? 'scaleX(-1)' : ''
+      // 朝向交给插件：swim.ts 会写 pet.style.transform = scaleX(±1)。
+      // 这里再镜像一次会出现「双镜像 + 拖拽朝向来回切」= 闪烁。
+      canvas.style.transform = ''
     }
+
 
     observer = new MutationObserver(sync)
     observer.observe(el, { attributes: true, attributeFilter: ['class'] })
