@@ -422,7 +422,16 @@ export function apply(ctx: Context): () => void {
     const detail = (event as CustomEvent<{ on?: boolean }>).detail
     sounds.setSpeaking(detail?.on === true)
   }
-  if (typeof document !== 'undefined') document.addEventListener('pet-whale-speak', onSpeakState)
+  if (typeof document !== 'undefined') {
+    // 幂等注册：bundle 重新求值（HMR/重装载）时先摘掉上一代监听，避免重复叠挂
+    const HOOK = '__pwhSpeakHook'
+    const host = window as unknown as Record<string, unknown>
+    const prev = host[HOOK] as EventListener | undefined
+    if (prev) document.removeEventListener('dsh:speaking', prev)
+    host[HOOK] = onSpeakState
+    // 生态中立事件：dsh-tts 播报期间音效压低/跳过互动音（没装 dsh-tts 时永不触发，无副作用）
+    document.addEventListener('dsh:speaking', onSpeakState)
+  }
 
   // ===== 游泳系统 =====
   const swimmer = new WhaleSwimmer({

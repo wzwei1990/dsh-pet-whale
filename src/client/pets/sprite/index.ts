@@ -190,7 +190,9 @@ export const spritePet: PetModule = {
       const detail = (e as CustomEvent<{ on?: boolean }>).detail
       setSpeaking(detail?.on === true)
     }
-    document.addEventListener('pet-whale-speak', onSpeakEvent)
+    // 只认生态里的中立事件（dsh-tts 播报时派发；其他语音源也能派同一个）：
+    //   音乐/语音开始时 → window.__pwhSpeak.start() 或派 dsh:speaking {on:true}
+    document.addEventListener('dsh:speaking', onSpeakEvent)
 
     observer = new MutationObserver(sync)
     observer.observe(el, { attributes: true, attributeFilter: ['class'] })
@@ -200,7 +202,7 @@ export const spritePet: PetModule = {
       disposed = true
       el.removeEventListener('click', onClick)
       el.removeEventListener('mouseenter', onEnter)
-      document.removeEventListener('pet-whale-speak', onSpeakEvent)
+      document.removeEventListener('dsh:speaking', onSpeakEvent)
       delete (window as unknown as { __pwhSpeak?: unknown }).__pwhSpeak
       observer?.disconnect()
       observer = null
