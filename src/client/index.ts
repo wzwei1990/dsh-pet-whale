@@ -381,6 +381,34 @@ export function apply(ctx: Context): () => void {
     expireClass(b, 'show', 950)
   }
 
+  // ===== 诊断浮层（默认关闭）=====
+  // 打开方式：控制台执行 localStorage.setItem('pet-whale:debug','1') 后刷新页面。
+  // 用途：当「看到却解释不了」的视觉问题（水花/扬尘）出现时，直接读出当前宠物类型、
+  // 粒子层里实际有哪些元素、以及是否还有旧版水类节点残留——比猜省事。
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('pet-whale:debug') === '1') {
+      const box = document.createElement('div')
+      box.style.cssText = 'position:fixed;left:6px;top:6px;z-index:10000;font:11px/1.4 ui-monospace,monospace;'
+        + 'background:rgba(20,22,30,.82);color:#cfe;padding:6px 8px;border-radius:6px;pointer-events:none;white-space:pre'
+      document.body.appendChild(box)
+      const tick = (): void => {
+        const layer = document.querySelector('[data-dsh-whale-particles]')
+        const kids = layer ? Array.from(layer.children).map((n) => (n as HTMLElement).className) : []
+        const counts: Record<string, number> = {}
+        for (const k of kids) counts[k] = (counts[k] ?? 0) + 1
+        box.textContent = 'pet=' + activePet.id
+          + ' aquatic=' + String(activePet.aquatic === true)
+          + ' rootAquatic=' + (root.dataset.petAquatic ?? '-')
+          + ' bodyAquatic=' + (document.body.dataset.petAquatic ?? '-')
+          + '\nparticles=' + (kids.length ? JSON.stringify(counts) : '{}')
+      }
+      tick()
+      window.setInterval(tick, 500)
+    }
+  } catch {
+    /* 诊断失败不影响功能 */
+  }
+
   // ===== 游泳系统 =====
   const swimmer = new WhaleSwimmer({
     root,
@@ -2035,8 +2063,9 @@ export function apply(ctx: Context): () => void {
         swimmer.spawnSplash(px + PET_W() / 2, py + PET_H() * 0.79, 4)
         swimmer.spawnWaterRipple(px + PET_W() / 2, py + PET_H() * 0.79, false)
       } else {
-        // 非水生宠物：给落地光环，不溅水花（2026-11-16 用户反馈）
+        // 非水生宠物：落地尘环 + 一团扬尘（不用水花：2026-11-16 用户反馈）
         swimmer.spawnLandRing(px + PET_W() / 2, py + PET_H() * 0.9)
+        swimmer.spawnDust(px + PET_W() / 2, py + PET_H() * 0.93, 6)
       }
       savePos()
       // 保持初始朝向不变

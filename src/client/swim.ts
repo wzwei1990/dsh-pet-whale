@@ -398,17 +398,17 @@ export class WhaleSwimmer {
    * 和水花是两种语义——水花只属于水生宠物（见 spawnSplash 的 isAquatic 门控），
    * 陆生宠物用水花会很违和（2026-11-17 用户反馈）。
    */
-  public spawnDust(x: number, y: number, count = 3): void {
+  public spawnDust(x: number, y: number, count = 4): void {
     if (typeof document === 'undefined' || this.prefersReducedMotion()) return
     const layer = getOrCreateParticleLayer()
     if (!layer) return
     for (let i = 0; i < count; i++) {
       const puff = document.createElement('span')
       puff.className = 'pw-dust'
-      const size = 5 + Math.random() * 5
+      const size = 8 + Math.random() * 10
       const dx = Math.random() * 26 - 13
       const dy = -(6 + Math.random() * 10)
-      const dur = 0.42 + Math.random() * 0.22
+      const dur = 0.6 + Math.random() * 0.25
       puff.style.left = `${x + (Math.random() * 16 - 8)}px`
       puff.style.top = `${y}px`
       puff.style.width = `${size.toFixed(1)}px`
@@ -650,7 +650,7 @@ export class WhaleSwimmer {
       if (now - this.lastStreamBubbleTime > dustGap && progress > 0.08 && progress < 0.92) {
         this.lastStreamBubbleTime = now
         const sz = this.ctx.petSize()
-        this.spawnDust(curX + sz.w / 2, curY + sz.h * 0.96, 2)
+        this.spawnDust(curX + sz.w / 2, curY + sz.h * 0.95, 3)
       }
     }
 

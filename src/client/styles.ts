@@ -596,8 +596,8 @@ body[data-pet-aquatic='false'] .pw-drag-drip {
   position: fixed;
   pointer-events: none;
   border-radius: 50%;
-  border: 2px solid rgba(140, 170, 255, 0.55);
-  box-shadow: 0 0 10px rgba(140, 170, 255, 0.35);
+  border: 2px solid rgba(178, 176, 170, 0.6);
+  box-shadow: 0 0 8px rgba(178, 176, 170, 0.3);
   transform: translate(-50%, -50%) scale(0.35);
   animation: pw-landRing 0.42s ease-out forwards;
   z-index: 2;
@@ -607,19 +607,22 @@ body[data-pet-aquatic='false'] .pw-drag-drip {
   to   { opacity: 0;    transform: translate(-50%, -50%) scale(1.25); }
 }
 
-/* 陆生宠物的扬尘（走路/挪步时脚下的小灰白粉尘） */
+/* 陆生宠物的扬尘（走路/挪步/落地时脚下的小灰白粉尘）
+   之前太淡（5~10px、0.5s、z-index:2 被宠物盖住）导致「看不到」，
+   现在放大到 8~18px、0.75s、z-index 提到宠物之上，颜色改中性灰（别再像水花）。 */
 .pw-dust {
   position: fixed;
   pointer-events: none;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(190, 196, 210, 0.55) 0%, rgba(190, 196, 210, 0.18) 60%, transparent 100%);
+  background: radial-gradient(circle, rgba(186, 182, 174, 0.72) 0%, rgba(186, 182, 174, 0.28) 55%, transparent 100%);
   transform: translate(-50%, -50%);
-  animation: pw-dustPuff var(--pw-du-dur, 0.5s) ease-out forwards;
-  z-index: 2;
+  animation: pw-dustPuff var(--pw-du-dur, 0.75s) ease-out forwards;
+  z-index: 999;
 }
 @keyframes pw-dustPuff {
-  0%   { opacity: 0.75; transform: translate(-50%, -50%) scale(0.4); }
-  100% { opacity: 0;    transform: translate(calc(-50% + var(--pw-du-dx, 0px)), calc(-50% + var(--pw-du-dy, 0px))) scale(1.15); }
+  0%   { opacity: 0.9; transform: translate(-50%, -50%) scale(0.35); }
+  60%  { opacity: 0.55; }
+  100% { opacity: 0;   transform: translate(calc(-50% + var(--pw-du-dx, 0px)), calc(-50% + var(--pw-du-dy, 0px))) scale(1.5); }
 }
 
 .pw-splash-drop {
