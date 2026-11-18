@@ -181,9 +181,11 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   let lastGood: { img: HTMLImageElement; anim: SpriteAnimation; frame: number } | null = null
   let startedAt = performance.now()
   let raf = 0
+  let lastFrameAt = performance.now()
+  let frameErrorLogged = false
   let stopped = false
 
-  const draw = (now: number): void => {
+  const drawUnsafe = (now: number): void => {
     if (stopped) return
     if (typeof document !== 'undefined' && document.hidden) return
     const img = images.get(current.id)
@@ -273,7 +275,34 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     if (fade >= 1) fadeStart = null
     raf = requestAnimationFrame(draw)
   }
+  /**
+   * 安全包装：任何一帧抛异常都只丢这一帧，不让 requestAnimationFrame 链断掉。
+   * 断链的表现就是"卡死"——画面停在某一帧再也不动（2026-11-18 用户反馈）。
+   */
+  const draw = (now = performance.now()): void => {
+    if (stopped) return
+    raf = 0
+    lastFrameAt = performance.now()
+    try {
+      drawUnsafe(now)
+    } catch (error) {
+      if (!frameErrorLogged) {
+        frameErrorLogged = true
+        console.warn('[pet-whale][warn] 精灵帧绘制异常（已降级为丢帧继续）:', error)
+      }
+    }
+    if (!disposed && raf === 0) raf = requestAnimationFrame(draw)
+  }
   raf = requestAnimationFrame(draw)
+
+  // 看门狗：3 秒没有成功走过一帧就重启渲染循环
+  const watchdog = window.setInterval(() => {
+    if (disposed) return
+    if (performance.now() - lastFrameAt > 3000 && raf === 0) {
+      console.warn('[pet-whale][warn] 精灵帧渲染停滞，重启循环')
+      raf = requestAnimationFrame(draw)
+    }
+  }, 2000)
 
   return {
     play: (id, playOnce = false, holdLast = false, from = 0, onEnd) => {
@@ -300,6 +329,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
       stopped = true
       cancelAnimationFrame(raf)
       disposed = true
+      window.clearInterval(watchdog)
       lastGood = null
       images.clear()
     },
