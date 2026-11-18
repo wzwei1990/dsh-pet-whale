@@ -32,6 +32,65 @@ const STATE_CLASSES = ['think', 'working', 'celebrate', 'error', 'wait', 'disapp
 let speakingFlag = false
 let applySpeaking: ((on: boolean) => void) | null = null
 
+/** 表情 → 动作（pack.states 优先，缺省用这里的内置映射） */
+const EMOTION_ANIM: Record<string, string> = {
+  celebrate: 'state-celebrate-lively',
+  think: 'state-think',
+  working: 'state-working',
+  wait: 'state-wait',
+  shy: 'state-shy',
+  error: 'click-tsundere',
+}
+/** 当前表情动作与失效时间（pet_react 触发，一次性播放） */
+/** 用户最后一次操作的时间（判断"在场/离开"），模块级：隐藏再显示也保留 */
+let lastActivityAt = Date.now()
+let activityBound = false
+function ensureActivityTracker(): void {
+  if (activityBound || typeof document === 'undefined') return
+  activityBound = true
+  const touch = (): void => { lastActivityAt = Date.now() }
+  for (const type of ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart']) {
+    document.addEventListener(type, touch, { passive: true, capture: true })
+  }
+}
+/** 时段：0–5 深夜 / 6–10 早上 / 11–17 白天 / 18–23 晚上 */
+function periodOf(hour: number): string {
+  if (hour < 6) return 'night'
+  if (hour < 11) return 'morning'
+  if (hour < 18) return 'day'
+  return 'evening'
+}
+
+let reactionAnim = ''
+let reactionUntil = 0
+let applyReaction: ((emotion: string, hold?: boolean, durationMs?: number) => void) | null = null
+let reactionCursor = 0
+let reactionTimer = 0
+
+/**
+ * 轮询 pet_react 事件（服务端 /pet-whale/api/reactions）。
+ * 用事件而不是回复正文里的内联标签：不污染工作回复，也不依赖模型记得写标记。
+ */
+function ensureReactionPoller(): void {
+  if (reactionTimer !== 0 || typeof fetch !== 'function') return
+  reactionTimer = window.setInterval(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/pet-whale/api/reactions?since=' + String(reactionCursor), { cache: 'no-store' })
+        if (!res.ok) return
+        const payload = await res.json()
+        const items = Array.isArray(payload.items) ? payload.items : []
+        if (typeof payload.cursor === 'number' && payload.cursor > reactionCursor) reactionCursor = payload.cursor
+        for (const item of items) {
+          if (item && typeof item.emotion === 'string') {
+            applyReaction?.(item.emotion, item.hold === true, typeof item.durationMs === 'number' ? item.durationMs : 6000)
+          }
+        }
+      } catch { /* 服务端没挂上就静默重试 */ }
+    })()
+  }, 1200)
+}
+
 /** 事件监听只注册一次（HMR/重装载时先摘旧的） */
 function ensureSpeakListener(): void {
   if (typeof document === 'undefined') return
@@ -147,10 +206,23 @@ export const spritePet: PetModule = {
     }
 
     /** 待机池：默认 [idleAnimationId]，可配多段轮换 */
+    /** 在场判定：超过 choreography.awayAfterMs 没操作 → 离开 */
+    const isAway = (): boolean => {
+      const after = pack?.choreography?.awayAfterMs ?? 300_000
+      return Date.now() - lastActivityAt > after
+    }
+    /** 编排：离开 → away 动作；否则按时段取池，缺省回落到 idleAnimationIds */
     const idlePool = (): string[] => {
-      const raw = pack?.idleAnimationIds ?? []
-      const valid = raw.filter((id) => pack?.animations.some((a) => a.id === id))
-      if (valid.length > 0) return valid
+      const valid = (ids: string[] | undefined): string[] =>
+        (ids ?? []).filter((id) => pack?.animations.some((a) => a.id === id))
+      if (isAway()) {
+        const away = valid(pack?.choreography?.away ? [pack.choreography.away] : undefined)
+        if (away.length > 0) return away
+      }
+      const byPeriod = valid(pack?.choreography?.periods?.[periodOf(new Date().getHours())])
+      if (byPeriod.length > 0) return byPeriod
+      const fallback = valid(pack?.idleAnimationIds)
+      if (fallback.length > 0) return fallback
       return pack ? [pack.idleAnimationId] : []
     }
     let idleRotateTimer = 0
@@ -171,7 +243,7 @@ export const spritePet: PetModule = {
         lastOnce = false
         player.play(lastTarget)
         scheduleIdleRotate()
-      }, 25_000)
+      }, pack?.choreography?.rotationMs ?? 25_000)
     }
     let lastIdlePick = ''
 
@@ -207,14 +279,19 @@ export const spritePet: PetModule = {
         if (!lastOnce || lastTarget === pack.idleAnimationId) playTalk()
         return
       }
-      // agent 状态（思考/工作/庆祝/出错…）优先于走动/待机
+      // 表情动作（pet_react）优先于 agent 状态；过期后自动回落到状态/待机
+      const reacting = reactionAnim !== '' && performance.now() < reactionUntil
+      if (!reacting) reactionAnim = ''
+      // 优先级：pet_react（情绪插播）> agent 状态（自动兜底）> 走动 > 待机
       const running = STATE_CLASSES.find((name) => el.classList.contains(name))
       const stateAnim = running ? pack.states?.[running] : undefined
       const hasStateAnim = stateAnim !== undefined && pack.animations.some((a) => a.id === stateAnim)
-      let target = hasStateAnim
-        ? (stateAnim as string)
-        : moving ? (pack.movement?.leftAnimationId ?? pack.idleAnimationId) : pack.idleAnimationId
-      const enteringIdle = !hasStateAnim && !moving
+      let target = reacting
+        ? reactionAnim
+        : hasStateAnim
+          ? (stateAnim as string)
+          : moving ? (pack.movement?.leftAnimationId ?? pack.idleAnimationId) : pack.idleAnimationId
+      const enteringIdle = !reacting && !hasStateAnim && !moving
       if (enteringIdle) {
         const pool = idlePool()
         if (pool.length > 1) {
@@ -270,6 +347,26 @@ export const spritePet: PetModule = {
     // 事件监听走模块级 ensureSpeakListener()（跨隐藏保留状态），这里只托管 setSpeaking
     applySpeaking = setSpeaking
     ensureSpeakListener()
+    ensureReactionPoller()
+    ensureActivityTracker()
+    applyReaction = (emotion: string, hold = false, durationMs = 6000): void => {
+      if (emotion === 'idle') {
+        reactionAnim = ''
+        reactionUntil = 0
+        sync()
+        return
+      }
+      const anim = pack?.states?.[emotion] ?? EMOTION_ANIM[emotion]
+      if (!anim) return
+      // 让非精灵宠物也能响应（moc3 以后接）
+      try {
+        window.dispatchEvent(new CustomEvent('pet-whale-react', { detail: { emotion } }))
+      } catch { /* 忽略 */ }
+      reactionAnim = anim
+      // hold=true：一直保持到下次调用；否则按 durationMs 到期回落
+      reactionUntil = hold ? Number.POSITIVE_INFINITY : performance.now() + durationMs
+      sync()
+    }
     // 重新挂载时如果语音还在播（隐藏期间开始的），立刻接上说话动作
     if (speakingFlag) setSpeaking(true)
 
@@ -283,6 +380,7 @@ export const spritePet: PetModule = {
       el.removeEventListener('mouseenter', onEnter)
       clearIdleRotate()
       applySpeaking = null
+      applyReaction = null
       delete (window as unknown as { __pwhSpeak?: unknown }).__pwhSpeak
       observer?.disconnect()
       observer = null

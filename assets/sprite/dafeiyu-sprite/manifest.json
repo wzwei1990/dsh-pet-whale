@@ -325,5 +325,37 @@
   "talk-mumble-wipe",
   "talk-hum",
   "talk-food"
- ]
+ ],
+ "meta": {
+  "name": "大肥鱼（精灵帧）",
+  "version": "1.0.0",
+  "author": "hunmer/aboutme-pets（透明 webm 上游：PC2005-cloud/dsh-pet）",
+  "license": "素材禁商用，需署名上游；见 aboutme-pets 仓库说明",
+  "source": "https://github.com/hunmer/aboutme-pets"
+ },
+ "choreography": {
+  "rotationMs": 25000,
+  "awayAfterMs": 300000,
+  "away": "state-wait",
+  "periods": {
+   "morning": [
+    "idle",
+    "talk-mumble-wipe"
+   ],
+   "day": [
+    "idle",
+    "talk-food",
+    "talk-hum"
+   ],
+   "evening": [
+    "idle",
+    "talk-hum",
+    "talk-mumble-wipe"
+   ],
+   "night": [
+    "state-wait",
+    "idle"
+   ]
+  }
+ }
 }

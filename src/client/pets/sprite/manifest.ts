@@ -63,6 +63,16 @@ export interface SpritePack {
    * 这里按映射切动作；缺项或文件不存在时回落 idle。
    */
   states?: Record<string, string>
+  /**
+   * 编排（时段 × 在场 × 随机池）：
+   * 按小时分时段决定待机动作池；用户长时间无操作时切到 `away` 动作。
+   */
+  choreography?: {
+    rotationMs?: number
+    awayAfterMs?: number
+    away?: string
+    periods?: Record<string, string[]>
+  }
   /** 说话时轮换的动作池（整帧素材没有口型参数，只能靠动作表现"在说话"） */
   talk?: SpritePool
   click?: SpritePool
