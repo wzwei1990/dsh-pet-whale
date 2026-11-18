@@ -353,9 +353,30 @@ export const spritePet: PetModule = {
     //   window.__pwhSpeak.start()  → 开始说话（随机轮换碎碎念/哼歌，播完自动换下一段）
     //   window.__pwhSpeak.stop()   → 说完回 idle
     // 也可以派事件：document.dispatchEvent(new CustomEvent('pet-whale-speak', { detail: { on: true } }))
+    /** 句子间隙防抖 timer：逐句朗读时每条之间会有 ~100-300ms 的 on:false/on:true */
+    let speakOffTimer = 0
     const setSpeaking = (on: boolean): void => {
-      speaking = on
-      speakingFlag = on
+      if (on) {
+        if (speakOffTimer !== 0) {
+          clearTimeout(speakOffTimer)
+          speakOffTimer = 0
+        }
+        // 已经在说话：不重启动作，让同一段碎碎念继续播
+        if (speaking) return
+        speaking = true
+        speakingFlag = true
+        sync()
+        return
+      }
+      speakingFlag = false
+      if (!speaking) return
+      // 延迟 900ms 再真正停止：下一句在间隙里开始时会被 on:true 取消
+      if (speakOffTimer !== 0) clearTimeout(speakOffTimer)
+      speakOffTimer = window.setTimeout(() => {
+        speakOffTimer = 0
+        speaking = false
+        sync()
+      }, 900)
       ;(window as unknown as { __pwhSpriteState?: unknown }).__pwhSpriteState = {
         speaking: on,
         anim: on ? lastTarget : pack?.idleAnimationId ?? '',
@@ -413,6 +434,7 @@ export const spritePet: PetModule = {
       el.removeEventListener('click', onClick)
       el.removeEventListener('mouseenter', onEnter)
       clearIdleRotate()
+      if (speakOffTimer !== 0) clearTimeout(speakOffTimer)
       applySpeaking = null
       applyReaction = null
       delete (window as unknown as { __pwhSpeak?: unknown }).__pwhSpeak
