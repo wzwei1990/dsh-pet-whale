@@ -85,6 +85,17 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   const priorityAnims = pack.animations.filter((a) => priority.has(a.id))
   const restAnims = pack.animations.filter((a) => !priority.has(a.id))
   await Promise.all(priorityAnims.map(loadOne))
+  // 待机帧是首屏底线：没加载成功就重试几次，避免"空白一段时间"
+  const idleAnim = pack.animations.find((a) => a.id === pack.idleAnimationId)
+  if (idleAnim !== undefined) {
+    let attempt = 0
+    while (!images.has(idleAnim.id) && attempt < 3 && !disposed) {
+      attempt += 1
+      await new Promise((resolve) => window.setTimeout(resolve, 1200))
+      await loadOne(idleAnim)
+      if (!images.has(idleAnim.id)) console.warn('[pet-whale][warn] 待机帧加载失败，第 ' + attempt + ' 次重试')
+    }
+  }
   // 后台补齐：逐个排队，避免和首屏抢带宽
   let bgIndex = 0
   const loadBackground = (): void => {
@@ -166,6 +177,8 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   let fadeStart: number | null = null
   let prevImg: HTMLImageElement | undefined
   let prevFrame = 0
+  /** 最近一次成功绘制的帧（目标动作没加载时用它顶上，避免画布空白） */
+  let lastGood: { img: HTMLImageElement; anim: SpriteAnimation; frame: number } | null = null
   let startedAt = performance.now()
   let raf = 0
   let stopped = false
@@ -174,6 +187,22 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     if (stopped) return
     if (typeof document !== 'undefined' && document.hidden) return
     const img = images.get(current.id)
+    if (img === undefined) {
+      // 目标动作还没加载（懒加载/即时补载中）：继续画上一帧，绝不空帧
+      if (lastGood !== null) {
+        const lg = lastGood
+        const lc = lg.frame % lg.anim.columns
+        const lr = Math.floor(lg.frame / lg.anim.columns)
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(
+          lg.img,
+          lc * lg.anim.frameWidth, lr * lg.anim.frameHeight,
+          lg.anim.frameWidth, lg.anim.frameHeight,
+          fit.dx, fit.dy, lg.anim.frameWidth * fit.scale, lg.anim.frameHeight * fit.scale,
+        )
+      }
+      return
+    }
     const total = current.frameCount || current.columns * current.rows
     const span = Math.max(1, total - startFrame)
     const elapsed = ((now - startedAt) / 1000) * current.fps * rate
@@ -227,6 +256,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
       ctx.globalAlpha = fade
     }
     if (img) {
+      lastGood = { img, anim: current, frame }
       ctx.drawImage(
         img,
         c * current.frameWidth,
@@ -270,6 +300,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
       stopped = true
       cancelAnimationFrame(raf)
       disposed = true
+      lastGood = null
       images.clear()
     },
   }
