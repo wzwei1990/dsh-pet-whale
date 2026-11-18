@@ -264,6 +264,8 @@ export const spritePet: PetModule = {
       }, pack?.choreography?.rotationMs ?? 25_000)
     }
     let lastIdlePick = ''
+    /** 上一次 working 变体：保证随机但不连续重复 */
+    let lastWorkingState = ''
     /** 待机轮换计数：每 3 次插一次"自娱自乐"长动作 */
     let idleRotations = 0
 
@@ -304,11 +306,18 @@ export const spritePet: PetModule = {
       if (!reacting) reactionAnim = ''
       // 优先级：pet_react（情绪插播）> agent 状态（自动兜底）> 走动 > 待机
       const running = STATE_CLASSES.find((name) => el.classList.contains(name))
-      // working 有多个变体时按时段轮换（清点归档 / 忙碌点按），避免一直同一段
+      // working 有多个变体时**随机**（排除上一段），不再按时间固定轮换
       const workingPool = pack.states?.workingPool
-      const workingAnim = running === 'working' && workingPool !== undefined && workingPool.length > 1
-        ? workingPool[Math.floor(Date.now() / (pack.choreography?.rotationMs ?? 25000)) % workingPool.length]
-        : undefined
+      let workingAnim: string | undefined
+      if (running === 'working' && workingPool !== undefined && workingPool.length > 0) {
+        const choices = workingPool.filter((id) => id !== lastWorkingState && (pack?.animations.some((a) => a.id === id) ?? false))
+        const pool = choices.length > 0 ? choices : workingPool
+        const picked = pool[Math.floor(Math.random() * pool.length)]
+        if (picked !== undefined) {
+          workingAnim = picked
+          lastWorkingState = picked
+        }
+      }
       const stateAnim = workingAnim ?? (running ? pack.states?.[running] : undefined)
       const hasStateAnim = stateAnim !== undefined && pack.animations.some((a) => a.id === stateAnim)
       let target = reacting

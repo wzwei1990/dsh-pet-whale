@@ -173,13 +173,22 @@ export function apply(ctx) {
         const b = state?.balance ?? {}
         const total = typeof b.totalBalance === 'number' ? b.totalBalance : undefined
         if (b.status === 'off' || total === undefined) return null
-        const cap = typeof b.budgetCap === 'number' ? b.budgetCap
-          : typeof state?.config?.balanceBudgetCap === 'number' ? state.config.balanceBudgetCap : 0
-        const ratio = cap > 0 ? total / cap : null
+        // 口径（用户 2026-11-18 选 B）：优先"今日预算剩余比例"，没有再退回余额预算上限
+        // cost-meter 的字段名是 config.budget.amount（不是 cap），且 enabled 可能为 false
+        const budgetCfg = state?.config?.budget ?? {}
+        const budgetCap = budgetCfg.enabled !== false && typeof budgetCfg.amount === 'number' ? budgetCfg.amount : 0
+        const budgetUsed = typeof state?.budgetUsed === 'number' ? state.budgetUsed : 0
+        const remaining = budgetCap > 0 ? Math.max(0, budgetCap - budgetUsed) : null
+        let ratio = null
+        if (remaining !== null) ratio = remaining / budgetCap
+        else if (typeof b.budgetCap === 'number' && b.budgetCap > 0) ratio = total / b.budgetCap
         const level = ratio === null
           ? (total <= 0 ? 'balance-empty' : 'balance-normal')
           : ratio >= 0.6 ? 'balance-rich' : ratio >= 0.2 ? 'balance-normal' : 'balance-empty'
-        const text = (b.currency ?? '') + ' ' + total.toFixed(2) + (ratio === null ? '' : '（剩 ' + Math.round(ratio * 100) + '%）')
+        const unit = b.currency ?? ''
+        const text = remaining !== null
+          ? unit + ' ' + total.toFixed(2) + '（预算剩 ' + Math.round(ratio * 100) + '%：' + remaining.toFixed(2) + '/' + budgetCap + '）'
+          : unit + ' ' + total.toFixed(2) + (ratio === null ? '' : '（' + Math.round(ratio * 100) + '%）')
         return { level, text }
       }
       const check = async () => {

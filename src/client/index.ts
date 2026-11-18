@@ -1372,6 +1372,33 @@ export function apply(ctx: Context): () => void {
         return
       }
 
+      /** 导入素材包 zip：仅在"行为"面板提供；成功后提示包名与许可 */
+      const openPackImport = (): void => {
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = '.zip,application/zip'
+        input.onchange = () => {
+          const file = input.files?.[0]
+          if (!file) return
+          showDialog('正在导入素材包…')
+          void (async () => {
+            try {
+              const res = await fetch('/pet-whale/api/packs/import', { method: 'POST', body: file })
+              const data = await res.json() as { ok?: boolean; id?: string; error?: string; meta?: { name?: string; license?: string } }
+              if (data.ok === true) {
+                const name = data.meta?.name !== undefined ? '（' + data.meta.name + '）' : ''
+                showDialog('已导入：' + String(data.id ?? '') + name)
+              } else {
+                showDialog('导入失败：' + String(data.error ?? '未知错误'))
+              }
+            } catch (error) {
+              showDialog('导入失败：' + String(error instanceof Error ? error.message : error))
+            }
+          })()
+        }
+        input.click()
+      }
+
       if (mode === 'behavior') {
                 appendMenuBtn(`${strings.panel.thinkTicker}${tickerOn ? ' ✓' : ''}`, () => {
           tickerOn = !tickerOn
@@ -1385,6 +1412,10 @@ export function apply(ctx: Context): () => void {
           buildMenu('behavior')
           menu.classList.add('open')
           positionMenu(lastMenuPos.x, lastMenuPos.y)
+        })
+        appendMenuBtn('导入素材包…', () => {
+          menu.classList.remove('open')
+          openPackImport()
         })
         appendMenuBtn(`${strings.panel.swim}${swimmer.isEnabled ? ' ✓' : ''}`, () => {
           const next = swimmer.toggle()

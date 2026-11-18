@@ -8,15 +8,15 @@
  "click": {
   "animationIds": [
    "click-tsundere",
-   "click-wave"
-  ],
-  "strategy": "random"
+   "click-wave",
+   "state-shy"
+  ]
  },
  "hover": {
   "animationIds": [
+   "hover-startled",
    "click-wave"
-  ],
-  "strategy": "random"
+  ]
  },
  "movement": {
   "leftAnimationId": "walk-crab",
@@ -481,6 +481,45 @@
    "frameCount": 120,
    "fps": 12,
    "startFrame": 0
+  },
+  {
+   "id": "idle-mirror",
+   "name": "Mirror",
+   "label": "照镜子",
+   "file": "spritesheet/idle-mirror.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 5
+  },
+  {
+   "id": "idle-fan",
+   "name": "Fan",
+   "label": "摇扇纳凉",
+   "file": "spritesheet/idle-fan.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 8
+  },
+  {
+   "id": "hover-startled",
+   "name": "Startled",
+   "label": "被吓一跳",
+   "file": "spritesheet/hover-startled.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 0
   }
  ],
  "playbackRate": 1.2,
@@ -548,7 +587,9 @@
    ],
    "night": [
     "state-wait",
-    "idle"
+    "idle",
+    "idle-mirror",
+    "idle-fan"
    ]
   },
   "activities": [
