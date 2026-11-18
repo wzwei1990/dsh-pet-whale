@@ -55,42 +55,64 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   )
 
   /**
-   * 素材里角色并不铺满整帧（实测 idle 帧：x 213–425、y 63–329，占 640×360 的中间偏下），
-   * 直接铺满画布会让脚离容器底还有一段 → 和地面阴影之间有空隙，看着像“悬空”。
-   * 这里按 idle 首帧的 alpha 包围盒算一次映射：底部对齐画布底、水平居中、整体放大到占满高度。
+   * 取景范围：不能只看 idle 帧。
+   * 实测 idle 的内容在 y 63–329，但有些动作会画到头顶以外（举剑、头顶飘道具），
+   * 只按 idle 包围盒映射 → 那些动作的顶部会被画布裁掉（2026-11-18 用户反馈）。
+   * 这里扫描**所有动作的若干采样帧**，取并集包围盒，再按并集铺满画布。
+   * 为了快，采样到 160×90 再扫（不逐像素全尺寸扫），误差 <4px。
    */
   const fit = (() => {
-    const idleAnim = pack.animations.find((a) => a.id === pack.idleAnimationId)
-    const img = idleAnim ? images.get(idleAnim.id) : undefined
-    if (!idleAnim || !img) return { scale: 1, dx: 0, dy: 0 }
+    const SCALE = 0.25
     const probe = document.createElement('canvas')
-    probe.width = idleAnim.frameWidth
-    probe.height = idleAnim.frameHeight
-    const pctx = probe.getContext('2d')
+    probe.width = Math.round(pack.canvasWidth * SCALE)
+    probe.height = Math.round(pack.canvasHeight * SCALE)
+    const pctx = probe.getContext('2d', { willReadFrequently: true })
     if (!pctx) return { scale: 1, dx: 0, dy: 0 }
-    pctx.drawImage(img, 0, 0, idleAnim.frameWidth, idleAnim.frameHeight, 0, 0, probe.width, probe.height)
-    const data = pctx.getImageData(0, 0, probe.width, probe.height).data
-    let x0 = probe.width, y0 = probe.height, x1 = -1, y1 = -1
-    for (let y = 0; y < probe.height; y++) {
-      for (let x = 0; x < probe.width; x++) {
-        if (data[(y * probe.width + x) * 4 + 3] > 24) {
-          if (x < x0) x0 = x
-          if (x > x1) x1 = x
-          if (y < y0) y0 = y
-          if (y > y1) y1 = y
+    let x0 = probe.width
+    let y0 = probe.height
+    let x1 = -1
+    let y1 = -1
+    for (const anim of pack.animations) {
+      const img = images.get(anim.id)
+      if (!img) continue
+      const total = anim.frameCount || anim.columns * anim.rows
+      // 每个动作抽 8 帧（含首尾），足以覆盖大多数“飘出去”的瞬间
+      for (let k = 0; k < 8; k++) {
+        const frame = Math.min(total - 1, Math.floor((total - 1) * (k / 7)))
+        const col = frame % anim.columns
+        const row = Math.floor(frame / anim.columns)
+        pctx.clearRect(0, 0, probe.width, probe.height)
+        pctx.drawImage(
+          img,
+          col * anim.frameWidth, row * anim.frameHeight, anim.frameWidth, anim.frameHeight,
+          0, 0, probe.width, probe.height,
+        )
+        const data = pctx.getImageData(0, 0, probe.width, probe.height).data
+        for (let y = 0; y < probe.height; y++) {
+          for (let x = 0; x < probe.width; x++) {
+            if (data[(y * probe.width + x) * 4 + 3] > 24) {
+              if (x < x0) x0 = x
+              if (x > x1) x1 = x
+              if (y < y0) y0 = y
+              if (y > y1) y1 = y
+            }
+          }
         }
       }
     }
     if (x1 < 0) return { scale: 1, dx: 0, dy: 0 }
-    const bw = x1 - x0 + 1
-    const bh = y1 - y0 + 1
-    // 高度占满 96%，底部留 2% 当落地余量
-    const scale = (pack.canvasHeight * 0.96) / bh
-    const dx = pack.canvasWidth / 2 - (x0 + bw / 2) * scale
-    const dy = pack.canvasHeight - (y0 + bh) * scale - pack.canvasHeight * 0.02
+    const bx0 = x0 / SCALE
+    const by0 = y0 / SCALE
+    const bw = (x1 - x0 + 1) / SCALE
+    const bh = (y1 - y0 + 1) / SCALE
+    // 高度占满 94%（留 3% 上下余量给“飘出去”的峰值帧），底部对齐
+    const scale = (pack.canvasHeight * 0.94) / bh
+    const dx = pack.canvasWidth / 2 - (bx0 + bw / 2) * scale
+    const dy = pack.canvasHeight - (by0 + bh) * scale - pack.canvasHeight * 0.03
     return { scale, dx, dy }
   })()
 
+  /** 播放倍速（manifest.playbackRate，默认 1） */
   const rate = Math.max(0.25, Math.min(4, pack.playbackRate ?? 1))
   const idleId = pack.idleAnimationId
   let current: SpriteAnimation = pack.animations.find((a) => a.id === idleId) as SpriteAnimation

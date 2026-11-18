@@ -286,6 +286,19 @@
    "frameCount": 120,
    "fps": 12,
    "startFrame": 33
+  },
+  {
+   "id": "state-celebrate-lively",
+   "name": "Celebrate lively",
+   "label": "开心跃动",
+   "file": "spritesheet/state-celebrate-lively.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 11
   }
  ],
  "playbackRate": 1.2,
@@ -295,7 +308,6 @@
    "talk-mumble-screen",
    "talk-mumble-daze",
    "talk-deep",
-   "talk-food",
    "talk-giggle"
   ],
   "strategy": "random"
@@ -303,7 +315,7 @@
  "states": {
   "think": "state-think",
   "working": "state-working",
-  "celebrate": "state-celebrate",
+  "celebrate": "state-celebrate-lively",
   "error": "click-tsundere",
   "wait": "state-wait",
   "disappointed": "state-shy"
@@ -311,6 +323,7 @@
  "idleAnimationIds": [
   "idle",
   "talk-mumble-wipe",
-  "talk-hum"
+  "talk-hum",
+  "talk-food"
  ]
 }
