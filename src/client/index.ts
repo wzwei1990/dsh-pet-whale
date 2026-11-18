@@ -2361,11 +2361,16 @@ export function apply(ctx: Context): () => void {
     (sessions?.list.getSnapshot().byId as Readonly<Record<string, SessionRow | undefined>> | undefined)?.[id]
 
   let badgeCount = 0
+  /** 正在跑的其他会话标题：角标 tooltip 里列出来，避免只看到一个孤零零的数字 */
+  let otherRunningTitles: string[] = []
   const updateBadge = () => {
     const n = followAll ? otherRunning : 0
     badge.hidden = n === 0
     badge.textContent = n > 9 ? '9+' : String(n)
-    badge.title = n === 0 ? '' : strings.multi.badge(n)
+    const names = otherRunningTitles.slice(0, 3)
+    badge.title = n === 0
+      ? ''
+      : strings.multi.badge(n) + (names.length > 0 ? '\n· ' + names.join('\n· ') + (n > names.length ? '\n…' : '') : '')
     // 数字变了就弹一下；先摘类再强制回流，连续变化也能重新播
     if (n > 0 && n !== badgeCount) {
       badge.classList.remove('pop')
@@ -2387,6 +2392,7 @@ export function apply(ctx: Context): () => void {
     }
     let running = 0
     let waiting = 0
+    const titles: string[] = []
     let done: string | undefined
     let newlyWaiting: string | undefined
     for (const [id, st] of snapshot) {
@@ -2401,7 +2407,10 @@ export function apply(ctx: Context): () => void {
       }
       const isRunning = st.running === true
       const isWaiting = st.pendingInteraction !== undefined
-      if (isRunning) running++
+      if (isRunning) {
+        running++
+        if (isRunning) titles.push(rowOf(id)?.displayTitle ?? id)
+      }
       if (isWaiting) waiting++
       if (statusPrimed && prevOtherRunning.get(id) === true && st.running === false) {
         if (followAll) recordCelebrate()
@@ -2413,6 +2422,7 @@ export function apply(ctx: Context): () => void {
     }
     statusPrimed = true
     otherRunning = running
+    otherRunningTitles = titles
     otherWaiting = waiting
     updateBadge()
     if (followAll) {
