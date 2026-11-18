@@ -8,7 +8,20 @@
 // - 只服务允许的根目录内的文件（normalize + 前缀校验，拒绝 ../ 穿越）
 // - 只允许白名单扩展名
 // - 一天缓存 + ETag（mtime/size），模型换文件后自动失效
-import { createReadStream, readFileSync, readdirSync, statSync } from 'node:fs'
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
 import { homedir } from 'node:os'
 import { dirname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -111,7 +124,7 @@ export function apply(ctx) {
         parameters: {
           type: 'object',
           properties: {
-            emotion: { type: 'string', enum: ['celebrate', 'think', 'working', 'wait', 'shy', 'error', 'idle'], description: '要做哪种表情/动作；idle = 回待机' },
+            emotion: { type: 'string', enum: ['celebrate', 'think', 'working', 'wait', 'shy', 'error', 'sleep', 'wake', 'balance-rich', 'balance-normal', 'balance-empty', 'idle'], description: '要做哪种表情/动作；idle = 回待机' },
             text: { type: 'string', description: '可选：她头顶气泡里显示的一句话' },
             hold: { type: 'boolean', description: 'true = 一直保持这个动作，直到下次调用（长任务用）' },
             durationMs: { type: 'number', description: '可选：保持多少毫秒（默认 6000；hold=true 时忽略）' },
@@ -149,6 +162,50 @@ export function apply(ctx) {
     }
   } catch (error) {
     log(ctx, 'warn', '注册 pet_react 失败：' + (error instanceof Error ? error.message : String(error)))
+  }
+
+  // ── 余额联动（可选）：dsh-cost-meter 提供 ctx.costMeter 服务 ──
+  let lastBalance = { level: '', text: '', at: 0 }
+  try {
+    const costMeter = typeof ctx?.get === 'function' ? ctx.get('costMeter') : undefined
+    if (costMeter?.getState !== undefined) {
+      const pick = (state) => {
+        const b = state?.balance ?? {}
+        const total = typeof b.totalBalance === 'number' ? b.totalBalance : undefined
+        if (b.status === 'off' || total === undefined) return null
+        const cap = typeof b.budgetCap === 'number' ? b.budgetCap
+          : typeof state?.config?.balanceBudgetCap === 'number' ? state.config.balanceBudgetCap : 0
+        const ratio = cap > 0 ? total / cap : null
+        const level = ratio === null
+          ? (total <= 0 ? 'balance-empty' : 'balance-normal')
+          : ratio >= 0.6 ? 'balance-rich' : ratio >= 0.2 ? 'balance-normal' : 'balance-empty'
+        const text = (b.currency ?? '') + ' ' + total.toFixed(2) + (ratio === null ? '' : '（剩 ' + Math.round(ratio * 100) + '%）')
+        return { level, text }
+      }
+      const check = async () => {
+        try {
+          const state = await costMeter.getState()
+          const info = pick(state)
+          if (info === null) return
+          // 只在档位变化时插播，避免每 5 分钟都跳一次
+          if (info.level === lastBalance.level) return
+          lastBalance = { level: info.level, text: info.text, at: Date.now() }
+          reactionSeq += 1
+          reactions.push({ seq: reactionSeq, emotion: info.level, text: info.text, hold: false, durationMs: 8000, at: Date.now() })
+          while (reactions.length > REACTION_LIMIT) reactions.shift()
+        } catch (error) {
+          log(ctx, 'debug', '余额查询失败：' + (error instanceof Error ? error.message : String(error)))
+        }
+      }
+      const timer = setInterval(() => void check(), 5 * 60_000)
+      timer.unref?.()
+      setTimeout(() => void check(), 15_000).unref?.()
+      log(ctx, 'info', '已接入余额联动（ctx.costMeter，5 分钟检查一次，档位变化才播动作）')
+    } else {
+      log(ctx, 'info', '未发现 dsh-cost-meter，余额联动关闭')
+    }
+  } catch (error) {
+    log(ctx, 'debug', '余额联动不可用：' + (error instanceof Error ? error.message : String(error)))
   }
 
   if (!webServer?.register) {
@@ -218,6 +275,61 @@ export function apply(ctx) {
   }
 
   /**
+   * 安装一个素材包 zip：解压 → 找含 manifest.json / pack.json 的目录 → 放到
+   * $DSH_HOME/dsh-pet/{sprite|moc3}/<id>；重名自动加 -2/-3，绝不覆盖已有包。
+   * 解压用系统 tar（Windows 10+ 自带 bsdtar，支持 zip）；失败再试 unzip。
+   */
+  const installPackZip = (buffer) => {
+    const work = mkdtempSync(join(tmpdir(), 'pet-pack-'))
+    try {
+      const zipPath = join(work, 'pack.zip')
+      writeFileSync(zipPath, buffer)
+      const outDir = join(work, 'out')
+      mkdirSync(outDir)
+      let extracted = spawnSync('tar', ['-xf', zipPath, '-C', outDir], { windowsHide: true })
+      if (extracted.status !== 0) {
+        extracted = spawnSync('unzip', ['-o', '-q', zipPath, '-d', outDir], { windowsHide: true })
+      }
+      if (extracted.status !== 0) throw new Error('解压失败（需要系统 tar 或 unzip 可用）')
+
+      const findPackDir = (dir) => {
+        if (existsSync(join(dir, 'manifest.json'))) return { dir, kind: 'sprite' }
+        if (existsSync(join(dir, 'pack.json'))) return { dir, kind: 'moc3' }
+        for (const name of readdirSync(dir)) {
+          const child = join(dir, name)
+          try {
+            if (!statSync(child).isDirectory()) continue
+          } catch { continue }
+          const found = findPackDir(child)
+          if (found) return found
+        }
+        return null
+      }
+      const found = findPackDir(outDir)
+      if (!found) throw new Error('zip 里没有找到 manifest.json 或 pack.json')
+      const meta = found.kind === 'sprite'
+        ? (JSON.parse(readFileSync(join(found.dir, 'manifest.json'), 'utf8')).meta ?? null)
+        : (JSON.parse(readFileSync(join(found.dir, 'pack.json'), 'utf8')).meta ?? null)
+
+      const root = found.kind === 'sprite' ? SPRITE_ROOTS[1] : MOC3_ROOTS[1]
+      mkdirSync(root, { recursive: true })
+      const base = found.dir.split(/[\\/]/).pop() || 'pack'
+      let id = base
+      for (let n = 2; existsSync(join(root, id)); n++) id = base + '-' + n
+      const dest = join(root, id)
+      try {
+        renameSync(found.dir, dest)
+      } catch {
+        // 跨盘符时 rename 会失败：退化为复制目录
+        const copy = spawnSync('cp', ['-R', found.dir, dest], { windowsHide: true })
+        if (copy.status !== 0) throw new Error('安装失败：无法移动目录（跨盘符且没有 cp）')
+      }
+      return { ok: true, kind: found.kind, id, meta }
+    } finally {
+      try { rmSync(work, { recursive: true, force: true }) } catch { /* 忽略 */ }
+    }
+  }
+  /**
    * 包元数据清单：读取每个素材包的 meta（name/version/author/license/source）。
    * 精灵包读 manifest.json 的 meta；moc3 包读 pack.json 的 meta。
    * 用途：许可透明（禁止再分发的模型不会悄悄进包）、以后做导入时判断重名不覆盖。
@@ -270,8 +382,42 @@ export function apply(ctx) {
   webServer.register({
     path: '/pet-whale/api/packs',
     handler: (req, res) => {
+      const url = new URL(req.url ?? '/', 'http://localhost')
+      // 前缀路由会把 /packs/import 也送进来，这里按路径分支
+      if (url.pathname.endsWith('/import')) {
+        if ((req.method ?? 'GET') !== 'POST') {
+          res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' })
+          res.end('POST a zip body to install a pack')
+          return
+        }
+        const chunks = []
+        let size = 0
+        req.on('data', (chunk) => {
+          size += chunk.length
+          if (size > 80 * 1024 * 1024) { req.destroy(); return }
+          chunks.push(chunk)
+        })
+        req.on('end', () => {
+          try {
+            const result = installPackZip(Buffer.concat(chunks))
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+            res.end(JSON.stringify(result))
+          } catch (error) {
+            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }))
+          }
+        })
+        return
+      }
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify({ packs: listPacks() }))
+    },
+  })
+  webServer.register({
+    path: '/pet-whale/api/balance',
+    handler: (req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify({ lastBalance }))
     },
   })
   webServer.register({

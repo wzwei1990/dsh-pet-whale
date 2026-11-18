@@ -299,6 +299,188 @@
    "frameCount": 120,
    "fps": 12,
    "startFrame": 11
+  },
+  {
+   "id": "state-sleep",
+   "name": "Sleep",
+   "label": "小憩沉眠",
+   "file": "spritesheet/state-sleep.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 21
+  },
+  {
+   "id": "state-wake",
+   "name": "Wake",
+   "label": "惊醒",
+   "file": "spritesheet/state-wake.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 22
+  },
+  {
+   "id": "state-error",
+   "name": "Error sweat",
+   "label": "叹气冒汗",
+   "file": "spritesheet/state-error.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 26
+  },
+  {
+   "id": "state-archive",
+   "name": "Archive",
+   "label": "清点归档",
+   "file": "spritesheet/state-archive.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 0
+  },
+  {
+   "id": "play-cube",
+   "name": "Cube",
+   "label": "玩魔方",
+   "file": "spritesheet/play-cube.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 0
+  },
+  {
+   "id": "play-gomoku",
+   "name": "Gomoku",
+   "label": "下五子棋",
+   "file": "spritesheet/play-gomoku.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 23
+  },
+  {
+   "id": "play-violin",
+   "name": "Violin",
+   "label": "小提琴",
+   "file": "spritesheet/play-violin.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 17
+  },
+  {
+   "id": "play-cat",
+   "name": "Pet cat",
+   "label": "撸猫",
+   "file": "spritesheet/play-cat.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 0
+  },
+  {
+   "id": "eat-breakfast",
+   "name": "Breakfast",
+   "label": "吃早餐",
+   "file": "spritesheet/eat-breakfast.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 0
+  },
+  {
+   "id": "eat-lunch",
+   "name": "Lunch",
+   "label": "吃午餐",
+   "file": "spritesheet/eat-lunch.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 19
+  },
+  {
+   "id": "eat-dinner",
+   "name": "Dinner",
+   "label": "吃晚餐",
+   "file": "spritesheet/eat-dinner.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 1
+  },
+  {
+   "id": "balance-normal",
+   "name": "Balance normal",
+   "label": "钱袋如常",
+   "file": "spritesheet/balance-normal.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 0
+  },
+  {
+   "id": "balance-empty",
+   "name": "Balance empty",
+   "label": "分文不剩",
+   "file": "spritesheet/balance-empty.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 7
+  },
+  {
+   "id": "balance-rich",
+   "name": "Balance rich",
+   "label": "钱袋满溢",
+   "file": "spritesheet/balance-rich.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 0
   }
  ],
  "playbackRate": 1.2,
@@ -316,9 +498,18 @@
   "think": "state-think",
   "working": "state-working",
   "celebrate": "state-celebrate-lively",
-  "error": "click-tsundere",
+  "error": "state-error",
   "wait": "state-wait",
-  "disappointed": "state-shy"
+  "disappointed": "state-shy",
+  "sleep": "state-sleep",
+  "wake": "state-wake",
+  "balance-rich": "balance-rich",
+  "balance-normal": "balance-normal",
+  "balance-empty": "balance-empty",
+  "workingPool": [
+   "state-working",
+   "state-archive"
+  ]
  },
  "idleAnimationIds": [
   "idle",
@@ -340,22 +531,31 @@
   "periods": {
    "morning": [
     "idle",
-    "talk-mumble-wipe"
+    "talk-mumble-wipe",
+    "eat-breakfast"
    ],
    "day": [
     "idle",
     "talk-food",
-    "talk-hum"
+    "talk-hum",
+    "eat-lunch"
    ],
    "evening": [
     "idle",
     "talk-hum",
-    "talk-mumble-wipe"
+    "talk-mumble-wipe",
+    "eat-dinner"
    ],
    "night": [
     "state-wait",
     "idle"
    ]
-  }
+  },
+  "activities": [
+   "play-cube",
+   "play-gomoku",
+   "play-violin",
+   "play-cat"
+  ]
  }
 }

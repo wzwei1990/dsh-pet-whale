@@ -39,20 +39,61 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
 
   // 预载全部动作图（8 个 ≈ 7.6MB，一次载完最省心；多了再改成按需）
   const images = new Map<string, HTMLImageElement>()
-  await Promise.all(
-    pack.animations.map(
-      (a) =>
-        new Promise<void>((resolve, reject) => {
-          const img = new Image()
-          img.onload = () => {
-            images.set(a.id, img)
-            resolve()
-          }
-          img.onerror = () => reject(new Error('图片加载失败: ' + a.file))
-          img.src = baseUrl + a.file.split('/').map(encodeURIComponent).join('/')
-        }),
-    ),
-  )
+  /** 正在加载中的动作（避免重复发起） */
+  const loading = new Set<string>()
+  let disposed = false
+  const loadOne = (anim: SpriteAnimation): Promise<void> => {
+    if (images.has(anim.id) || loading.has(anim.id)) return Promise.resolve()
+    loading.add(anim.id)
+    return new Promise<void>((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        loading.delete(anim.id)
+        if (disposed) return resolve()
+        images.set(anim.id, img)
+        resolve()
+      }
+      img.onerror = () => {
+        loading.delete(anim.id)
+        console.warn('[pet-whale][warn] 精灵帧图片加载失败: ' + anim.file)
+        resolve()
+      }
+      img.src = baseUrl + anim.file.split('/').map(encodeURIComponent).join('/')
+    })
+  }
+  /**
+   * 懒加载：32 段素材共 31MB，全量 Promise.all 会让首屏等很久。
+   * 先只加载"马上会用到"的动作（待机池 / 状态 / 说话 / 点击 / 悬停 / 移动），
+   * 其余在后台按顺序慢慢补；play() 遇到未加载的动作会即时补载。
+   */
+  const priority = new Set<string>()
+  const add = (id?: string): void => { if (id) priority.add(id) }
+  add(pack.idleAnimationId)
+  for (const id of pack.idleAnimationIds ?? []) add(id)
+  for (const ids of Object.values(pack.choreography?.periods ?? {})) for (const id of ids) add(id)
+  for (const id of pack.choreography?.activities ?? []) add(id)
+  for (const entry of Object.values(pack.states ?? {})) {
+    if (typeof entry === 'string') add(entry)
+    else if (Array.isArray(entry)) for (const id of entry) add(id)
+  }
+  for (const id of pack.talk?.animationIds ?? []) add(id)
+  for (const id of pack.click?.animationIds ?? []) add(id)
+  for (const id of pack.hover?.animationIds ?? []) add(id)
+  add(pack.movement?.leftAnimationId)
+  add(pack.movement?.rightAnimationId)
+  add(pack.movement?.dragAnimationId)
+  const priorityAnims = pack.animations.filter((a) => priority.has(a.id))
+  const restAnims = pack.animations.filter((a) => !priority.has(a.id))
+  await Promise.all(priorityAnims.map(loadOne))
+  // 后台补齐：逐个排队，避免和首屏抢带宽
+  let bgIndex = 0
+  const loadBackground = (): void => {
+    if (disposed) return
+    const next = restAnims[bgIndex++]
+    if (next === undefined) return
+    void loadOne(next).then(() => window.setTimeout(loadBackground, 120))
+  }
+  window.setTimeout(loadBackground, 800)
 
   /**
    * 取景范围：不能只看 idle 帧。
@@ -131,6 +172,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
 
   const draw = (now: number): void => {
     if (stopped) return
+    if (typeof document !== 'undefined' && document.hidden) return
     const img = images.get(current.id)
     const total = current.frameCount || current.columns * current.rows
     const span = Math.max(1, total - startFrame)
@@ -207,6 +249,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     play: (id, playOnce = false, holdLast = false, from = 0, onEnd) => {
       const next = pack.animations.find((a) => a.id === id)
       if (!next) return
+      if (!images.has(next.id)) void loadOne(next)
       if (next.id !== current.id) {
         // 记下当前帧，切换后 120ms 内做交叉淡入
         const elapsedNow = Math.floor(((performance.now() - startedAt) / 1000) * current.fps * rate)
@@ -226,6 +269,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     destroy: () => {
       stopped = true
       cancelAnimationFrame(raf)
+      disposed = true
       images.clear()
     },
   }

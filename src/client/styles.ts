@@ -836,4 +836,7 @@ body[data-pet-aquatic='false'] .pw-drag-drip {
   0%   { transform: scaleX(1) scaleY(1); }
   100% { transform: scaleX(1.12) scaleY(0.8); }
 }
+
+/* 非水生宠物（精灵帧 / moc3）不显示鲸鱼的睡眠 Zzz：那套特效只属于鲸鱼 */
+body[data-pet-aquatic='false'] .dsh-whale-zzz { display: none !important; }
 `

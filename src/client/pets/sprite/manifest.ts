@@ -62,7 +62,7 @@ export interface SpritePack {
    * 插件把状态 class 加在 .pet-official 上（idle/think/working/celebrate/error/wait/disappointed），
    * 这里按映射切动作；缺项或文件不存在时回落 idle。
    */
-  states?: Record<string, string>
+  states?: Record<string, string> & { workingPool?: string[] }
   /**
    * 编排（时段 × 在场 × 随机池）：
    * 按小时分时段决定待机动作池；用户长时间无操作时切到 `away` 动作。
@@ -72,6 +72,8 @@ export interface SpritePack {
     awayAfterMs?: number
     away?: string
     periods?: Record<string, string[]>
+    /** 自娱自乐池：每轮几次待机后插一段（玩魔方/下棋/小提琴…） */
+    activities?: string[]
   }
   /** 说话时轮换的动作池（整帧素材没有口型参数，只能靠动作表现"在说话"） */
   talk?: SpritePool

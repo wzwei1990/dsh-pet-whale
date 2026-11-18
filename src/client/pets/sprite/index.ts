@@ -39,7 +39,12 @@ const EMOTION_ANIM: Record<string, string> = {
   working: 'state-working',
   wait: 'state-wait',
   shy: 'state-shy',
-  error: 'click-tsundere',
+  error: 'state-error',
+  sleep: 'state-sleep',
+  wake: 'state-wake',
+  'balance-rich': 'balance-rich',
+  'balance-normal': 'balance-normal',
+  'balance-empty': 'balance-empty',
 }
 /** 当前表情动作与失效时间（pet_react 触发，一次性播放） */
 /** 用户最后一次操作的时间（判断"在场/离开"），模块级：隐藏再显示也保留 */
@@ -237,6 +242,19 @@ export const spritePet: PetModule = {
         if (!player || !pack || speaking) return
         if (lastTarget !== pack.idleAnimationId && !idlePool().includes(lastTarget)) return
         const pool = idlePool()
+        const card = pack
+        const acts = (card?.choreography?.activities ?? []).filter((id: string) => card?.animations.some((a) => a.id === id))
+        idleRotations += 1
+        if (acts.length > 0 && idleRotations % 3 === 0) {
+          const picked = acts[Math.floor(Math.random() * acts.length)]
+          if (picked) {
+            lastTarget = picked
+            lastOnce = false
+            player.play(picked)
+            scheduleIdleRotate()
+            return
+          }
+        }
         if (pool.length <= 1) return
         const next = pool.find((id) => id !== lastTarget) ?? pool[0]
         lastTarget = next ?? pack.idleAnimationId
@@ -246,6 +264,8 @@ export const spritePet: PetModule = {
       }, pack?.choreography?.rotationMs ?? 25_000)
     }
     let lastIdlePick = ''
+    /** 待机轮换计数：每 3 次插一次"自娱自乐"长动作 */
+    let idleRotations = 0
 
     const playTalk = (): void => {
       if (!player) return
@@ -284,7 +304,12 @@ export const spritePet: PetModule = {
       if (!reacting) reactionAnim = ''
       // 优先级：pet_react（情绪插播）> agent 状态（自动兜底）> 走动 > 待机
       const running = STATE_CLASSES.find((name) => el.classList.contains(name))
-      const stateAnim = running ? pack.states?.[running] : undefined
+      // working 有多个变体时按时段轮换（清点归档 / 忙碌点按），避免一直同一段
+      const workingPool = pack.states?.workingPool
+      const workingAnim = running === 'working' && workingPool !== undefined && workingPool.length > 1
+        ? workingPool[Math.floor(Date.now() / (pack.choreography?.rotationMs ?? 25000)) % workingPool.length]
+        : undefined
+      const stateAnim = workingAnim ?? (running ? pack.states?.[running] : undefined)
       const hasStateAnim = stateAnim !== undefined && pack.animations.some((a) => a.id === stateAnim)
       let target = reacting
         ? reactionAnim

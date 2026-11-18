@@ -2121,6 +2121,9 @@ export function apply(ctx: Context): () => void {
       hook(on)
       return
     }
+    // 只有鲸鱼用 .sleeping 特效；其他宠物（moc3 等）拿不到钩子就什么都不加，
+    // 避免"特效和动画不匹配"（2026-11-18 用户反馈）
+    if (activePet.id !== 'whale') return
     if (on) root.classList.add('sleeping')
     else root.classList.remove('sleeping')
   }

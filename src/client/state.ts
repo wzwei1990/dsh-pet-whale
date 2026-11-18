@@ -105,6 +105,8 @@ export class WhaleDriver {
   private prevError: string | null = null
   private transient: { state: 'celebrate' | 'error' | 'disappointed'; until: number } | null = null
   private stickyUntil: number | null = null
+  /** 离开 working/think 后保持该动作的截止时间：工具间隙别闪回待机 */
+  private activeUntil = 0
   private current: WhaleState = 'idle'
 
   /** 首帧初始化基线（不触发任何瞬态）。 */
@@ -177,6 +179,13 @@ export class WhaleDriver {
     } else {
       next = deriveContinuous(snap, this.stickyUntil, now)
     }
+    // 工具间隙抖动：快照偶发 running=false / 无工具活动时，别立刻切回待机
+    // （表现为"工具调用中却播待机东张西望"，2026-11-18 用户反馈）
+    if (next === 'working' || next === 'think') this.activeUntil = now + 4000
+    // 只在"回合还在跑"的时候保持：回合结束该回待机/庆祝，不能被这条拖住
+    if (snap.running && next === 'idle' && (this.current === 'working' || this.current === 'think') && now < this.activeUntil) {
+      next = this.current
+    }
     const changed = next !== this.current
     this.current = next
     return { state: next, changed, completed }
@@ -202,6 +211,7 @@ export class WhaleDriver {
     this.stickyUntil = null
     this.transient = null
     this.current = 'idle'
+    this.activeUntil = 0
     this.prevError = null
     this.prevTurnEnds = 0
   }
