@@ -382,6 +382,7 @@ export const spritePet: PetModule = {
       applySpeaking = null
       applyReaction = null
       delete (window as unknown as { __pwhSpeak?: unknown }).__pwhSpeak
+      delete (window as unknown as { __pwhSpriteSleep?: unknown }).__pwhSpriteSleep
       observer?.disconnect()
       observer = null
       player?.destroy()

@@ -2109,11 +2109,26 @@ export function apply(ctx: Context): () => void {
 // ===== 打瞌睡 =====
   let sleepTimer: number | undefined
   let sleeping = false
+  /**
+   * 睡觉表现按宠物类型分流：
+   * - 鲸鱼（live2d/moc3 之外的内置鲸）：沿用 `.sleeping` CSS（Zzz + 呼吸）
+   * - 精灵帧：不用那套 CSS（会和帧动画叠加打架），改播「哈欠连天」并保持
+   * 2026-11-18 用户反馈"眯一会的特效和别的动画冲突"。
+   */
+  const sleepVisual = (on: boolean): void => {
+    const hook = (window as unknown as { __pwhSpriteSleep?: (value: boolean) => void }).__pwhSpriteSleep
+    if (typeof hook === 'function') {
+      hook(on)
+      return
+    }
+    if (on) root.classList.add('sleeping')
+    else root.classList.remove('sleeping')
+  }
   const markActive = () => {
     cancelLater(sleepTimer)
     if (sleeping) {
       sleeping = false
-      root.classList.remove('sleeping')
+      sleepVisual(false)
       pet.classList.add('spouting')
       expireClass(pet, 'spouting', 1400)
       showDialog(strings.feedback.wake)
@@ -2125,7 +2140,7 @@ export function apply(ctx: Context): () => void {
         return
       }
       sleeping = true
-      root.classList.add('sleeping')
+      sleepVisual(true)
       clearMicroAction() // 正要睡着时如果动作还没演完，收掉（否则会一边睡觉一边转圈）
       showDialog(strings.feedback.sleep)
     }, SLEEP_MS)
@@ -2133,7 +2148,7 @@ export function apply(ctx: Context): () => void {
   const wake = () => {
     if (sleeping) {
       sleeping = false
-      root.classList.remove('sleeping')
+      sleepVisual(false)
       pet.classList.add('spouting')
       expireClass(pet, 'spouting', 1400)
     }
