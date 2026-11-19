@@ -40,7 +40,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   // 预载全部动作图（8 个 ≈ 7.6MB，一次载完最省心；多了再改成按需）
   const images = new Map<string, HTMLImageElement>()
   /** 解码图缓存上限：显示只用到 1–2 张，没必要让几十张位图常驻（实测 44 张 ≈ 1.2GB 会卡死页面） */
-  const CACHE_MAX = 10
+  const CACHE_MAX = 6
   const lru: string[] = []
   const touchImage = (id: string): void => {
     const i = lru.indexOf(id)
@@ -84,29 +84,22 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     })
   }
   /**
-   * 懒加载：32 段素材共 31MB，全量 Promise.all 会让首屏等很久。
-   * 先只加载"马上会用到"的动作（待机池 / 状态 / 说话 / 点击 / 悬停 / 移动），
-   * 其余在后台按顺序慢慢补；play() 遇到未加载的动作会即时补载。
+   * 预加载策略（2026-11-19 卡死修复）：
+   * 单张精灵表 5120×5400 解码约 110MB，之前把 states/talk/click/hover/activities
+   * 全部塞进优先队列（20+ 张 ≈ 2GB+），每次更新重载就卡死页面。
+   * 现在只预加载"马上会看到"的：基础待机 + 当前时段待机池 + 说话池。
+   * 其余全部按需加载（play() 时补），配合播放器 LRU 上限，常驻解码内存可控。
    */
   const priority = new Set<string>()
   const add = (id?: string): void => { if (id) priority.add(id) }
   add(pack.idleAnimationId)
-  for (const id of pack.idleAnimationIds ?? []) add(id)
-  for (const ids of Object.values(pack.choreography?.periods ?? {})) for (const id of ids) add(id)
-  for (const id of pack.choreography?.activities ?? []) add(id)
-  for (const entry of Object.values(pack.states ?? {})) {
-    if (typeof entry === 'string') add(entry)
-    else if (Array.isArray(entry)) for (const id of entry) add(id)
-  }
+  const hour = new Date().getHours()
+  const period = hour < 6 ? 'night' : hour < 11 ? 'morning' : hour < 18 ? 'day' : 'evening'
+  for (const id of pack.choreography?.periods?.[period] ?? pack.idleAnimationIds ?? []) add(id)
   for (const id of pack.talk?.animationIds ?? []) add(id)
-  for (const id of pack.click?.animationIds ?? []) add(id)
-  for (const id of pack.hover?.animationIds ?? []) add(id)
-  add(pack.movement?.leftAnimationId)
-  add(pack.movement?.rightAnimationId)
-  add(pack.movement?.dragAnimationId)
   const priorityAnims = pack.animations.filter((a) => priority.has(a.id))
-  const restAnims = pack.animations.filter((a) => !priority.has(a.id))
   await Promise.all(priorityAnims.map(loadOne))
+
   // 待机帧是首屏底线：没加载成功就重试几次，避免"空白一段时间"
   const idleAnim = pack.animations.find((a) => a.id === pack.idleAnimationId)
   if (idleAnim !== undefined) {
@@ -118,15 +111,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
       if (!images.has(idleAnim.id)) console.warn('[pet-whale][warn] 待机帧加载失败，第 ' + attempt + ' 次重试')
     }
   }
-  // 后台补齐：逐个排队，避免和首屏抢带宽
-  let bgIndex = 0
-  const loadBackground = (): void => {
-    if (disposed) return
-    const next = restAnims[bgIndex++]
-    if (next === undefined) return
-    void loadOne(next).then(() => window.setTimeout(loadBackground, 120))
-  }
-  window.setTimeout(loadBackground, 800)
+  // 其余动作全部按需加载（不再后台批量解码，避免反复解码/淘汰）
 
   /**
    * 取景范围：不能只看 idle 帧。
