@@ -25,7 +25,7 @@ export interface SpritePlayer {
    * @param hold 播完后**定格在最后一帧**（不弹回 idle）；上游拖拽动画就是 playOnce 语义，
    *             悬空时保持被拎起的姿态，放下才切回 idle
    */
-  play: (id: string, once?: boolean, hold?: boolean, from?: number, onEnd?: () => void) => void
+  play: (id: string, once?: boolean, hold?: boolean, from?: number, onEnd?: () => void, onLoop?: () => void) => void
   /** 当前动作 id（调试/日志） */
   current: () => string
   /** 提前加载接下来要播的动作（轮换开始时就调用，避免到点还在等下载） */
@@ -46,7 +46,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   /** 整帧快照：任何"没有可画图像"的帧都贴它，保证不空帧 */
   const snapshot = document.createElement('canvas')
   let snapshotReady = false
-  let pendingPlay: { id: string; once: boolean; hold: boolean; from: number; onEnd?: () => void } | null = null
+  let pendingPlay: { id: string; once: boolean; hold: boolean; from: number; onEnd?: () => void; onLoop?: () => void } | null = null
   /** 解码图缓存上限：显示只用到 1–2 张，没必要让几十张位图常驻（实测 44 张 ≈ 1.2GB 会卡死页面） */
   const CACHE_MAX = 3
   const lru: string[] = []
@@ -206,8 +206,10 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   let hold = false
   let startFrame = 0
   let onEndCb: (() => void) | null = null
+  /** 循环动作每播完一圈的回调（用于"播完再换"的轮换） */
+  let onLoopCb: (() => void) | null = null
   /** 交叉淡入：切换动作时把上一帧叠在下面淡出，避免硬切（拖拽/状态切换的"闪一下"） */
-  const FADE_MS = 120
+  const FADE_MS = 240
   let fadeStart: number | null = null
   let prevImg: HTMLImageElement | undefined
   let prevFrame = 0
@@ -226,7 +228,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
       const p = pendingPlay
       pendingPlay = null
       const anim = pack.animations.find((a) => a.id === p.id)
-      if (anim !== undefined) applyPlay(anim, p.once, p.hold, p.from, p.onEnd)
+      if (anim !== undefined) applyPlay(anim, p.once, p.hold, p.from, p.onEnd, p.onLoop)
     }
     if (typeof document !== 'undefined' && document.hidden) return
     const img = images.get(current.id)
@@ -287,6 +289,9 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
       }
     } else if (elapsed >= span) {
       startedAt = now // 循环动作从起手帧再来
+      // 每循环一圈通知一次（延迟到下一 tick，避免在绘制中重入 play）
+      const loopCb = onLoopCb
+      if (loopCb !== null) window.setTimeout(() => { if (!disposed) loopCb() }, 0)
     }
     const passed = Math.floor(((now - startedAt) / 1000) * current.fps * rate)
     const frame = startFrame + (passed % span)
@@ -294,7 +299,9 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     const r = Math.floor(frame / current.columns)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     // 交叉淡入：先把上一帧画满，再把当前帧按进度叠上去
-    const fade = fadeStart === null ? 1 : Math.min(1, (now - fadeStart) / FADE_MS)
+    const rawFade = fadeStart === null ? 1 : Math.min(1, (now - fadeStart) / FADE_MS)
+    // ease-in-out（smoothstep）：比线性更不容易看出"跳一下"
+    const fade = rawFade * rawFade * (3 - 2 * rawFade)
     if (fade < 1 && prevImg) {
       const pc = prevFrame % current.columns
       const pr = Math.floor(prevFrame / current.columns)
@@ -371,6 +378,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     holdLast: boolean,
     from: number,
     onEnd?: () => void,
+    onLoop?: () => void,
   ): void => {
     touchImage(next.id)
     protectedIds.clear()
@@ -392,17 +400,18 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     once = playOnce
     hold = holdLast
     onEndCb = onEnd ?? null
+    onLoopCb = playOnce ? null : (onLoop ?? null)
     startFrame = Math.max(0, from ?? next.startFrame ?? 0)
     startedAt = performance.now()
   }
 
   return {
-    play: (id, playOnce = false, holdLast = false, from = 0, onEnd) => {
+    play: (id, playOnce = false, holdLast = false, from = 0, onEnd, onLoop) => {
       const next = pack.animations.find((a) => a.id === id)
       if (!next) return
       if (!images.has(next.id)) {
         // 图片没加载完就先不切：继续显示当前动画，加载完由 draw 里补播，避免白屏一下
-        pendingPlay = { id, once: playOnce, hold: holdLast, from, onEnd }
+        pendingPlay = { id, once: playOnce, hold: holdLast, from, onEnd, onLoop }
         void loadOne(next)
         return
       }

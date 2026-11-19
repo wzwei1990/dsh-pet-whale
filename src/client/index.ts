@@ -1436,9 +1436,10 @@ export function apply(ctx: Context): () => void {
           menu.classList.remove('open')
           openPackImport()
         })
-        // 非水生宠物没有"游动"能力，隐藏这个开关（2026-11-18：文字/动画对应检查）
-        if (activePet.aquatic === true) {
-          appendMenuBtn(`${strings.panel.swim}${swimmer.isEnabled ? ' ✓' : ''}`, () => {
+        // 所有宠物都有"自己走走"能力：水生叫游泳，陆生叫散步（2026-11-19 用户要求恢复并改名）
+        {
+          const walkLabel = activePet.aquatic === true ? strings.panel.swim : '🚶 散步'
+          appendMenuBtn(`${walkLabel}${swimmer.isEnabled ? ' ✓' : ''}`, () => {
             const next = swimmer.toggle()
             showDialog(next ? strings.feedback.swimOn : strings.feedback.swimOff)
             buildMenu('behavior')
@@ -2175,6 +2176,9 @@ export function apply(ctx: Context): () => void {
   }
 
 // ===== 打瞌睡 =====
+  /** 睡多久自动醒一次（5 分钟）：一直睡到用户来碰也太死板 */
+  const NAP_WAKE_MS = () => 5 * 60_000
+  let napWakeTimer: number | undefined
   let sleepTimer: number | undefined
   let sleeping = false
   /**
@@ -2198,6 +2202,7 @@ export function apply(ctx: Context): () => void {
     cancelLater(sleepTimer)
     if (sleeping) {
       sleeping = false
+      cancelLater(napWakeTimer)
       sleepVisual(false)
       pet.classList.add('spouting')
       expireClass(pet, 'spouting', 1400)
@@ -2211,6 +2216,18 @@ export function apply(ctx: Context): () => void {
       }
       sleeping = true
       sleepVisual(true)
+      // A 方案：睡满 9–11 分钟自动醒，醒来打哈欠继续待机
+      cancelLater(napWakeTimer)
+      napWakeTimer = later(() => {
+        napWakeTimer = undefined
+        if (!sleeping || disposed) return
+        sleeping = false
+        sleepVisual(false)
+        pet.classList.add('spouting')
+        expireClass(pet, 'spouting', 1400)
+        showDialog(strings.feedback.wake)
+        markActive()
+      }, NAP_WAKE_MS())
       clearMicroAction() // 正要睡着时如果动作还没演完，收掉（否则会一边睡觉一边转圈）
       showDialog(strings.feedback.sleep)
     }, SLEEP_MS)
@@ -2231,6 +2248,7 @@ export function apply(ctx: Context): () => void {
    */
   function cancelSleep(): void {
     cancelLater(sleepTimer)
+    cancelLater(napWakeTimer)
     if (sleeping) {
       sleeping = false
       sleepVisual(false)

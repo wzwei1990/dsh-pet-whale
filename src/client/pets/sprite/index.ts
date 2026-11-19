@@ -253,44 +253,48 @@ export const spritePet: PetModule = {
     const clearIdleRotate = (): void => {
       if (idleRotateTimer !== 0) { clearTimeout(idleRotateTimer); idleRotateTimer = 0 }
     }
-    /** 待机每 25s 换一段（还在待机才换） */
+    /**
+     * 待机轮换：主力是"**当前动画播完一圈**再换"（onLoop 回调），
+     * 秒数只作为兜底（动画异常/回调丢失时不至于永不动）。
+     * 这样每段动作都能完整播完，不会 9 秒就切断。
+     */
+    const playIdleWithLoop = (id: string): void => {
+      if (!player) return
+      lastTarget = id
+      lastIdlePick = id
+      lastOnce = false
+      player.play(id, false, false, 0, undefined, () => {
+        // 一圈播完：还处于待机就换下一段
+        if (!speaking && !player) return
+        const waiting = rootEl?.classList.contains('dragging') === true
+        if (waiting) return
+        if (el.classList.contains('think') || el.classList.contains('working') || el.classList.contains('celebrate') || el.classList.contains('error') || el.classList.contains('wait')) return
+        rotateIdleNow()
+      })
+    }
+
+    const rotateIdleNow = (): void => {
+      if (!player || !pack || speaking) return
+      const actIds = (pack.choreography?.activities ?? []).filter((id) => pack?.animations.some((a) => a.id === id))
+      const decision = decideIdleRotation(
+        { lastTarget, pool: idlePool(), activities: actIds, rotations: idleRotations, idleId: pack.idleAnimationId },
+        pickFresh,
+      )
+      idleRotations = decision.rotations
+      const chosen = avoidSame(decision.play, lastTarget, idlePool(), pickFresh)
+      if (chosen !== undefined && chosen !== lastTarget) playIdleWithLoop(chosen)
+      if (decision.reschedule) scheduleIdleRotate()
+    }
+
     const scheduleIdleRotate = (): void => {
       clearIdleRotate()
-      // 提前预取：本轮计时期间就把"下一段可能要播的动作"解码好，
-      // 避免到点时还在等图（表现为同一个动画多播一轮）
-      if (player) {
-        const actIds = (pack?.choreography?.activities ?? [])
-        const pool = idlePool()
-        const upcoming = idleRotations % 3 === 2
-          ? (actIds.length > 0 ? actIds : pool)
-          : pool
-        player.preload(upcoming.filter((id) => id !== lastTarget))
-      }
+      // 兜底：30 秒还没有"播完一圈"的回调（例如动画卡住）就主动换
       idleRotateTimer = window.setTimeout(() => {
         idleRotateTimer = 0
-        if (!player || !pack) return
-        // 说话期间不换：但必须重排，否则说完就再也轮换不了
-        if (speaking) {
-          scheduleIdleRotate()
-          return
-        }
-        const actIds = (pack.choreography?.activities ?? []).filter((id) => pack?.animations.some((a) => a.id === id))
-        const decision = decideIdleRotation(
-          { lastTarget, pool: idlePool(), activities: actIds, rotations: idleRotations, idleId: pack.idleAnimationId },
-          pickFresh,
-        )
-        idleRotations = decision.rotations
-        // 抽回来正好是当前动作时换一个，避免它再显示一整轮（连续重复 2–3 次）
-        const chosen = avoidSame(decision.play, lastTarget, idlePool(), pickFresh)
-        if (chosen !== undefined && chosen !== lastTarget) {
-          lastTarget = chosen
-          lastIdlePick = chosen
-          lastOnce = false
-          player.play(chosen)
-        }
-        if (decision.reschedule) scheduleIdleRotate()
-      }, pack?.choreography?.rotationMs ?? 25_000)
+        rotateIdleNow()
+      }, pack?.choreography?.rotationMs ?? 30_000)
     }
+
     let lastIdlePick = ''
     /** 同池随机：洗牌袋（逻辑在 ./pick.ts，有单测） */
     const picker = createPoolPicker((id) => pack?.animations.some((a) => a.id === id) ?? false)
@@ -446,10 +450,15 @@ export const spritePet: PetModule = {
       }
       ;(window as unknown as { __pwhSpriteState?: unknown }).__pwhSpriteState = { speaking: false, anim: target }
       if (target && (target !== lastTarget || lastOnce)) {
-        lastTarget = target
-        lastOnce = false
-        player.play(target)
-        if (enteringIdle) scheduleIdleRotate()
+        if (enteringIdle) {
+          // 待机：用带"一圈回调"的播放，播完再换
+          playIdleWithLoop(target)
+          scheduleIdleRotate()
+        } else {
+          lastTarget = target
+          lastOnce = false
+          player.play(target)
+        }
       }
       // 朝向交给插件：swim.ts 会写 pet.style.transform = scaleX(±1)
       canvas.style.transform = ''

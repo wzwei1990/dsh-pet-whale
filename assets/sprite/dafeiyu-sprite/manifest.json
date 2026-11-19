@@ -642,7 +642,7 @@
   "source": "https://github.com/hunmer/aboutme-pets"
  },
  "choreography": {
-  "rotationMs": 9000,
+  "rotationMs": 30000,
   "awayAfterMs": 300000,
   "away": "state-wait",
   "periods": {
