@@ -546,6 +546,58 @@
    "frameCount": 120,
    "fps": 12,
    "startFrame": 30
+  },
+  {
+   "id": "talk-sing",
+   "name": "Singing",
+   "label": "清唱",
+   "file": "spritesheet/talk-sing.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 12
+  },
+  {
+   "id": "talk-phone",
+   "name": "Phone call",
+   "label": "打电话",
+   "file": "spritesheet/talk-phone.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 11
+  },
+  {
+   "id": "talk-vocal",
+   "name": "Vocalizing",
+   "label": "啊啊叫",
+   "file": "spritesheet/talk-vocal.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 9
+  },
+  {
+   "id": "talk-clapper",
+   "name": "Clapper",
+   "label": "打快板",
+   "file": "spritesheet/talk-clapper.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 0
   }
  ],
  "playbackRate": 1.2,
@@ -553,8 +605,6 @@
  "talk": {
   "animationIds": [
    "talk-mumble-screen",
-   "talk-mumble-daze",
-   "talk-deep",
    "talk-giggle"
   ],
   "strategy": "random"
@@ -576,7 +626,11 @@
    "state-archive"
   ],
   "squeeze": "state-squash",
-  "stretch": "state-stretch"
+  "stretch": "state-stretch",
+  "thinkPool": [
+   "state-think",
+   "talk-deep"
+  ]
  },
  "idleAnimationIds": [
   "idle",
@@ -598,20 +652,23 @@
   "periods": {
    "morning": [
     "idle",
-    "talk-mumble-wipe",
-    "eat-breakfast"
+    "eat-breakfast",
+    "talk-hum",
+    "talk-mumble-daze"
    ],
    "day": [
     "idle",
+    "eat-lunch",
     "talk-food",
-    "talk-hum",
-    "eat-lunch"
+    "talk-phone",
+    "idle-mirror"
    ],
    "evening": [
     "idle",
-    "talk-hum",
+    "eat-dinner",
     "talk-mumble-wipe",
-    "eat-dinner"
+    "talk-phone",
+    "idle-fan"
    ],
    "night": [
     "state-wait",
@@ -624,7 +681,10 @@
    "play-cube",
    "play-gomoku",
    "play-violin",
-   "play-cat"
+   "play-cat",
+   "talk-sing",
+   "talk-clapper",
+   "talk-vocal"
   ]
  }
 }

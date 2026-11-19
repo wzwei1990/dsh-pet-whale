@@ -417,10 +417,15 @@ export function apply(ctx: Context): () => void {
     /* 诊断失败不影响功能 */
   }
 
-  // 说话期间压低/静默宠物音效（TTS 播报时调用；sprite 模块派发 pet-whale-speak 事件）
+  /** TTS 是否正在播报：说话期间不进入睡眠（否则会冒出"先眯一会儿"） */
+  let ttsSpeaking = false
+  /** 挂载后的"取消睡眠"入口（睡眠逻辑在 mount 闭包里） */
+  let cancelSleepHook: (() => void) | null = null
   const onSpeakState = (event: Event): void => {
     const detail = (event as CustomEvent<{ on?: boolean }>).detail
-    sounds.setSpeaking(detail?.on === true)
+    ttsSpeaking = detail?.on === true
+    sounds.setSpeaking(ttsSpeaking)
+    if (ttsSpeaking) cancelSleepHook?.()
   }
   if (typeof document !== 'undefined') {
     // 幂等注册：bundle 重新求值（HMR/重装载）时先摘掉上一代监听，避免重复叠挂
@@ -565,7 +570,10 @@ export function apply(ctx: Context): () => void {
     const effective: WhaleState = pretendOn ? 'working' : next
     // 真开始干活了就别端着脾气，闹脾气只在闲着的时候成立
     if (effective !== 'idle' && sulking) clearSulk()
-    if (effective !== 'idle') wake()
+    if (effective !== 'idle') {
+      cancelSleep()
+      wake()
+    }
     for (const s of STATES) pet.classList.toggle(s, s === effective)
     if (effective === 'error' && visualState !== 'error') {
       endPat()
@@ -2197,7 +2205,7 @@ export function apply(ctx: Context): () => void {
       sounds.play('bubble')
     }
     sleepTimer = later(() => {
-      if (visualState !== 'idle' || dragging) {
+      if (visualState !== 'idle' || dragging || ttsSpeaking) {
         markActive()
         return
       }
@@ -2207,12 +2215,29 @@ export function apply(ctx: Context): () => void {
       showDialog(strings.feedback.sleep)
     }, SLEEP_MS)
   }
+  cancelSleepHook = () => cancelSleep()
   const wake = () => {
     if (sleeping) {
       sleeping = false
       sleepVisual(false)
       pet.classList.add('spouting')
       expireClass(pet, 'spouting', 1400)
+    }
+  }
+  /**
+   * 取消睡眠（含"先眯一会儿"气泡）。
+   * 之前只有 wake() 清动画，不清气泡；而且计时器触发后状态可能马上变成 working/think，
+   * 就会在其他状态下突然冒出一句"先眯一会儿"（2026-11-19 用户反馈）。
+   */
+  function cancelSleep(): void {
+    cancelLater(sleepTimer)
+    if (sleeping) {
+      sleeping = false
+      sleepVisual(false)
+    }
+    if (dialog.classList.contains('show') && dialog.textContent === strings.feedback.sleep) {
+      dialog.classList.remove('show')
+      cancelLater(dialogTimer)
     }
   }
 
@@ -2692,6 +2717,7 @@ export function apply(ctx: Context): () => void {
     window.removeEventListener('pointercancel', onMiniDragEnd)
     window.removeEventListener('blur', onBlur)
     cancelLater(sleepTimer)
+    if (cancelSleepHook !== null) cancelSleepHook = null
     window.clearTimeout(microActionTimer)
     if (sedentaryTimer !== 0) window.clearInterval(sedentaryTimer)
     window.clearInterval(chatterTimer)

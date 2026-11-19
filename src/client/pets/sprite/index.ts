@@ -288,6 +288,15 @@ export const spritePet: PetModule = {
     let lastWorkingState = ''
     /** 当前 working 变体（每轮换周期换一次，不是整个回合固定） */
     let workingPicked = ''
+    /** think 变体（思考冒泡 / 深度思考碎碎念） */
+    let thinkPicked = ''
+    let thinkRotateTimer = 0
+    const clearThinkRotate = (): void => {
+      if (thinkRotateTimer !== 0) {
+        clearTimeout(thinkRotateTimer)
+        thinkRotateTimer = 0
+      }
+    }
     /** working 轮换定时器：长任务期间按时换动作 */
     let workingRotateTimer = 0
     const clearWorkingRotate = (): void => {
@@ -330,8 +339,13 @@ export const spritePet: PetModule = {
         return
       }
       if (speaking) {
-        // 已经在说就不打断；没在说才起一段
-        if (!lastOnce || lastTarget === pack.idleAnimationId) playTalk()
+        // 当前播的是不是说话池里的动作？
+        // 之前只判断 lastOnce / idle：一段碎碎念播完后播放器自己回落成 idle，
+        // 但 lastOnce 仍是 true、lastTarget 还记着上一段 → 下一句开始时不会重起，
+        // 结果是"在说话却播待机动画"（2026-11-19 用户反馈）。
+        const talkPool = pack.talk?.animationIds ?? []
+        const onTalk = talkPool.includes(lastTarget)
+        if (!onTalk) playTalk()
         return
       }
       // 表情动作（pet_react）优先于 agent 状态；过期后自动回落到状态/待机
@@ -369,7 +383,32 @@ export const spritePet: PetModule = {
         workingPicked = ''
         clearWorkingRotate()
       }
-      const stateAnim = workingAnim ?? (running ? pack.states?.[running] : undefined)
+      // 思考变体：思考冒泡 / 深度思考碎碎念，每 20 秒轮换一次
+      const thinkPool = pack.states?.thinkPool
+      let thinkAnim: string | undefined
+      if (running === 'think' && thinkPool !== undefined && thinkPool.length > 0) {
+        if (thinkPicked === '' || !thinkPool.includes(thinkPicked)) {
+          const picked = pickFresh(thinkPool, 'think')
+          if (picked !== undefined) thinkPicked = picked
+        }
+        thinkAnim = thinkPicked
+        if (thinkRotateTimer === 0) {
+          thinkRotateTimer = window.setTimeout(() => {
+            thinkRotateTimer = 0
+            if (!player || !pack) return
+            if (!el.classList.contains('think')) return
+            const pool = pack.states?.thinkPool
+            if (pool === undefined || pool.length === 0) return
+            const picked = pickFresh(pool, 'think')
+            if (picked !== undefined) thinkPicked = picked
+            sync()
+          }, WORKING_ROTATE_MS)
+        }
+      } else if (running !== 'think') {
+        thinkPicked = ''
+        clearThinkRotate()
+      }
+      const stateAnim = workingAnim ?? thinkAnim ?? (running ? pack.states?.[running] : undefined)
       const hasStateAnim = stateAnim !== undefined && pack.animations.some((a) => a.id === stateAnim)
       let target = reacting
         ? reactionAnim
@@ -501,6 +540,7 @@ export const spritePet: PetModule = {
       window.removeEventListener('pet-whale-react', onReactEvent)
       clearIdleRotate()
       clearWorkingRotate()
+      clearThinkRotate()
       if (speakOffTimer !== 0) clearTimeout(speakOffTimer)
       if (reactionEndTimer !== 0) clearTimeout(reactionEndTimer)
       applySpeaking = null
