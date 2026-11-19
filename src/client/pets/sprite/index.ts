@@ -157,15 +157,10 @@ export const spritePet: PetModule = {
 
     let lastClick = ''
     let lastHover = ''
-    const pickExcluding = (ids: string[] | undefined, last: string): string | undefined => {
-      if (ids === undefined || ids.length === 0) return undefined
-      const choices = ids.filter((id) => id !== last)
-      const pool = choices.length > 0 ? choices : ids
-      return pool[Math.floor(Math.random() * pool.length)]
-    }
+    const pickExcluding = (ids: string[] | undefined, key: string): string | undefined => pickFresh(ids, key)
     const onClick = (): void => {
       if (!player || !pack) return
-      const id = pickExcluding(pack.click?.animationIds, lastClick)
+      const id = pickExcluding(pack.click?.animationIds, 'click')
       if (id) {
         lastClick = id
         player.play(id, true)
@@ -173,7 +168,7 @@ export const spritePet: PetModule = {
     }
     const onEnter = (): void => {
       if (!player || !pack) return
-      const id = pickExcluding(pack.hover?.animationIds, lastHover)
+      const id = pickExcluding(pack.hover?.animationIds, 'hover')
       if (id) {
         lastHover = id
         player.play(id, true)
@@ -226,10 +221,9 @@ export const spritePet: PetModule = {
       const pool = (pack?.talk?.animationIds ?? []).filter((id) => pack?.animations.some((a) => a.id === id))
       if (pool.length === 0) return pack?.idleAnimationId ?? ''
       if (pool.length === 1) return pool[0] as string
-      const rest = pool.filter((id) => id !== lastTalk)
-      const picked = rest[Math.floor(Math.random() * rest.length)] ?? pool[0]
+      const picked = pickFresh(pool, 'talk') ?? (pool[0] as string)
       lastTalk = picked
-      return picked as string
+      return picked
     }
 
     /** 待机池：默认 [idleAnimationId]，可配多段轮换 */
@@ -268,10 +262,7 @@ export const spritePet: PetModule = {
         const acts = (card?.choreography?.activities ?? []).filter((id: string) => card?.animations.some((a) => a.id === id))
         idleRotations += 1
         if (acts.length > 0 && idleRotations % 3 === 0) {
-          const actChoices = acts.filter((id) => id !== lastActivity)
-          const actPool = actChoices.length > 0 ? actChoices : acts
-          const picked = actPool[Math.floor(Math.random() * actPool.length)]
-          if (picked !== undefined) lastActivity = picked
+          const picked = pickFresh(acts, 'activity')
           if (picked) {
             lastTarget = picked
             lastOnce = false
@@ -281,9 +272,8 @@ export const spritePet: PetModule = {
           }
         }
         if (pool.length <= 1) return
-        const choices = pool.filter((id) => id !== lastTarget)
-        const next = choices.length > 0 ? choices[Math.floor(Math.random() * choices.length)] : pool[0]
-        lastIdlePick = next ?? pack.idleAnimationId
+        const next = pickFresh(pool, 'idle') ?? pack.idleAnimationId
+        lastIdlePick = next
         lastTarget = next ?? pack.idleAnimationId
         lastOnce = false
         player.play(lastTarget)
@@ -291,6 +281,39 @@ export const spritePet: PetModule = {
       }, pack?.choreography?.rotationMs ?? 25_000)
     }
     let lastIdlePick = ''
+    /**
+     * 同池挑选：洗牌袋（shuffle bag）。
+     * 每次把池子打乱后依次取，取完重新洗；新一轮的第一个不会和上一轮最后一个相同。
+     * 这样每一轮顺序都随机，且不会短周期内重复（用户 2026-11-19 明确口径：只按同一类型随机，不同类型之间不限制）。
+     */
+    const poolBags: Record<string, string[]> = {}
+    const poolLast: Record<string, string> = {}
+    const pickFresh = (ids: string[] | undefined, key: string): string | undefined => {
+      const valid = (ids ?? []).filter((id) => pack?.animations.some((a) => a.id === id))
+      if (valid.length === 0) return undefined
+      if (valid.length === 1) return valid[0]
+      let bag = poolBags[key]
+      if (bag === undefined || bag.length === 0) {
+        bag = [...valid]
+        for (let i = bag.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          const t = bag[i]
+          bag[i] = bag[j]
+          bag[j] = t
+        }
+        // 新一轮第一个别和上一轮最后一个撞
+        if (bag.length > 1 && bag[0] === poolLast[key]) {
+          const t = bag[0]
+          bag[0] = bag[1]
+          bag[1] = t
+        }
+        poolBags[key] = bag
+      }
+      const picked = bag.shift()
+      if (picked !== undefined) poolLast[key] = picked
+      return picked
+    }
+
     /** 上一次 working 变体：保证随机但不连续重复 */
     let lastWorkingState = ''
     /** 本段 working 选定的动作：保持到离开 working 为止，避免每次 sync 重掷 */
@@ -343,13 +366,8 @@ export const spritePet: PetModule = {
       if (running === 'working' && workingPool !== undefined && workingPool.length > 0) {
         // 只在还没选 / 选的失效时掷一次；之后保持，直到离开 working
         if (workingPicked === '' || !workingPool.includes(workingPicked)) {
-          const choices = workingPool.filter((id) => id !== lastWorkingState && (pack?.animations.some((a) => a.id === id) ?? false))
-          const pool = choices.length > 0 ? choices : workingPool
-          const picked = pool[Math.floor(Math.random() * pool.length)]
-          if (picked !== undefined) {
-            workingPicked = picked
-            lastWorkingState = picked
-          }
+          const picked = pickFresh(workingPool, 'working')
+          if (picked !== undefined) workingPicked = picked
         }
         workingAnim = workingPicked
       } else if (running !== 'working') {
@@ -371,11 +389,10 @@ export const spritePet: PetModule = {
           // 已经在待机池里：**保持当前动作**，别被重置回 idleAnimationId
           target = lastTarget
         } else if (pool.length > 1) {
-          // 进入待机时随机换一段（排除上一段和当前）
-          const choices = pool.filter((id) => id !== lastIdlePick && id !== lastTarget)
-          const picked = choices[Math.floor(Math.random() * choices.length)] ?? pool[0]
-          lastIdlePick = picked ?? pack.idleAnimationId
-          target = lastIdlePick
+          // 进入待机时在同池内随机（最近 3 段不重复）
+          const picked = pickFresh(pool, 'idle') ?? pack.idleAnimationId
+          lastIdlePick = picked
+          target = picked
         }
       } else {
         clearIdleRotate()

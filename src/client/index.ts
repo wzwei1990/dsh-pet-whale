@@ -2219,7 +2219,17 @@ export function apply(ctx: Context): () => void {
   const onMouseMove = (e: MouseEvent) => {
     // 隐藏时不再追光，也不因鼠标移动唤醒台词
     if (root.classList.contains('hidden')) return
-    markActive()
+    // 只有鼠标靠近她（160px 内）才算"有人活动"：
+    // 之前页面上任何鼠标移动都会 markActive，刚说完"先眯一会儿"就被远端移动叫醒
+    // （2026-11-19 用户反馈：睡觉动画根本没播出来）
+    const near = (() => {
+      const r = pet.getBoundingClientRect()
+      if (r.width === 0) return false
+      const dx = Math.max(r.left - e.clientX, 0, e.clientX - r.right)
+      const dy = Math.max(r.top - e.clientY, 0, e.clientY - r.bottom)
+      return dx <= 160 && dy <= 160
+    })()
+    if (near) markActive()
     // 躲避判定自带守卫，且不能被下面追光的 rAF 节流挡掉，所以放在 early-return 之前
     maybeAvoid(e)
     maybePat(e)
