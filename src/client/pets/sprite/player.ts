@@ -39,8 +39,10 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
 
   // 预载全部动作图（8 个 ≈ 7.6MB，一次载完最省心；多了再改成按需）
   const images = new Map<string, HTMLImageElement>()
+  /** 等待图片加载的切换请求 */
+  let pendingPlay: { id: string; once: boolean; hold: boolean; from: number; onEnd?: () => void } | null = null
   /** 解码图缓存上限：显示只用到 1–2 张，没必要让几十张位图常驻（实测 44 张 ≈ 1.2GB 会卡死页面） */
-  const CACHE_MAX = 6
+  const CACHE_MAX = 3
   const lru: string[] = []
   const touchImage = (id: string): void => {
     const i = lru.indexOf(id)
@@ -93,11 +95,9 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   const priority = new Set<string>()
   const add = (id?: string): void => { if (id) priority.add(id) }
   add(pack.idleAnimationId)
-  const hour = new Date().getHours()
-  const period = hour < 6 ? 'night' : hour < 11 ? 'morning' : hour < 18 ? 'day' : 'evening'
-  for (const id of pack.choreography?.periods?.[period] ?? pack.idleAnimationIds ?? []) add(id)
-  for (const id of pack.talk?.animationIds ?? []) add(id)
   const priorityAnims = pack.animations.filter((a) => priority.has(a.id))
+  // 推迟到下一轮事件循环再解码，避免插件重载/首屏的同一个 tick 里做重活
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 0))
   await Promise.all(priorityAnims.map(loadOne))
 
   // 待机帧是首屏底线：没加载成功就重试几次，避免"空白一段时间"
@@ -120,7 +120,58 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
    * 这里扫描**所有动作的若干采样帧**，取并集包围盒，再按并集铺满画布。
    * 为了快，采样到 160×90 再扫（不逐像素全尺寸扫），误差 <4px。
    */
-  const fit = (() => {
+  /** 每段动画自己的取景：不同来源的素材锚点不一样，共用并集框会"歪" */
+  const fits = new Map<string, { scale: number; dx: number; dy: number }>()
+  const fitFor = (anim: SpriteAnimation): { scale: number; dx: number; dy: number } => {
+    const cached = fits.get(anim.id)
+    if (cached !== undefined) return cached
+    const img = images.get(anim.id)
+    const fallback = { scale: 1, dx: 0, dy: 0 }
+    if (img === undefined) return fallback
+    const SCALE = 0.25
+    const total = anim.frameCount || anim.columns * anim.rows
+    let x0 = anim.frameWidth
+    let y0 = anim.frameHeight
+    let x1 = -1
+    let y1 = -1
+    const c = document.createElement('canvas')
+    c.width = Math.round(anim.frameWidth * SCALE)
+    c.height = Math.round(anim.frameHeight * SCALE)
+    const ctx2 = c.getContext('2d', { willReadFrequently: true })
+    if (ctx2 === null) return fallback
+    for (let k = 0; k < 3; k++) {
+      const frame = Math.min(total - 1, Math.floor((total - 1) * (k / 2)))
+      const col = frame % anim.columns
+      const row = Math.floor(frame / anim.columns)
+      ctx2.clearRect(0, 0, c.width, c.height)
+      ctx2.drawImage(img, col * anim.frameWidth, row * anim.frameHeight, anim.frameWidth, anim.frameHeight, 0, 0, c.width, c.height)
+      const data = ctx2.getImageData(0, 0, c.width, c.height).data
+      for (let y = 0; y < c.height; y++) {
+        for (let x = 0; x < c.width; x++) {
+          if (data[(y * c.width + x) * 4 + 3] > 24) {
+            if (x < x0) x0 = x
+            if (x > x1) x1 = x
+            if (y < y0) y0 = y
+            if (y > y1) y1 = y
+          }
+        }
+      }
+    }
+    if (x1 < 0) return fallback
+    const bx0 = x0 / SCALE
+    const by0 = y0 / SCALE
+    const bw = (x1 - x0 + 1) / SCALE
+    const bh = (y1 - y0 + 1) / SCALE
+    const fit = {
+      scale: (pack.canvasHeight * 0.92) / bh,
+      dx: pack.canvasWidth / 2 - (bx0 + bw / 2) * ((pack.canvasHeight * 0.92) / bh),
+      dy: pack.canvasHeight - (by0 + bh) * ((pack.canvasHeight * 0.92) / bh) - pack.canvasHeight * 0.02,
+    }
+    fits.set(anim.id, fit)
+    return fit
+  }
+
+  const unusedFit = (() => {
     const SCALE = 0.25
     const probe = document.createElement('canvas')
     probe.width = Math.round(pack.canvasWidth * SCALE)
@@ -194,12 +245,20 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
 
   const drawUnsafe = (now: number): void => {
     if (stopped) return
+    // 等待中的切换：图加载好了就补播
+    if (pendingPlay !== null && images.has(pendingPlay.id)) {
+      const p = pendingPlay
+      pendingPlay = null
+      const anim = pack.animations.find((a) => a.id === p.id)
+      if (anim !== undefined) applyPlay(anim, p.once, p.hold, p.from, p.onEnd)
+    }
     if (typeof document !== 'undefined' && document.hidden) return
     const img = images.get(current.id)
     if (img === undefined) {
       // 目标动作还没加载（懒加载/即时补载中）：继续画上一帧，绝不空帧
       if (lastGood !== null) {
         const lg = lastGood
+        const fit = fitFor(lg.anim)
         const lc = lg.frame % lg.anim.columns
         const lr = Math.floor(lg.frame / lg.anim.columns)
         ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -212,6 +271,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
       }
       return
     }
+    const fit = fitFor(current)
     const total = current.frameCount || current.columns * current.rows
     const span = Math.max(1, total - startFrame)
     const elapsed = ((now - startedAt) / 1000) * current.fps * rate
@@ -311,28 +371,45 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     }
   }, 2000)
 
+  /** 真正切换动画（play 的外部入口保证图片已加载） */
+  const applyPlay = (
+    next: SpriteAnimation,
+    playOnce: boolean,
+    holdLast: boolean,
+    from: number,
+    onEnd?: () => void,
+  ): void => {
+    touchImage(next.id)
+    evictImages(next.id, pack.idleAnimationId)
+    if (next.id !== current.id) {
+      // 记下当前帧，切换后 120ms 内做交叉淡入
+      const elapsedNow = Math.floor(((performance.now() - startedAt) / 1000) * current.fps * rate)
+      const spanNow = Math.max(1, (current.frameCount || current.columns * current.rows) - startFrame)
+      prevImg = images.get(current.id)
+      prevAnimationId = current.id
+      prevFrame = startFrame + (elapsedNow % spanNow)
+      fadeStart = performance.now()
+    }
+    current = next
+    once = playOnce
+    hold = holdLast
+    onEndCb = onEnd ?? null
+    startFrame = Math.max(0, from ?? next.startFrame ?? 0)
+    startedAt = performance.now()
+  }
+
   return {
     play: (id, playOnce = false, holdLast = false, from = 0, onEnd) => {
       const next = pack.animations.find((a) => a.id === id)
       if (!next) return
-      if (!images.has(next.id)) void loadOne(next)
-      touchImage(next.id)
-      evictImages(next.id, pack.idleAnimationId)
-      if (next.id !== current.id) {
-        // 记下当前帧，切换后 120ms 内做交叉淡入
-        const elapsedNow = Math.floor(((performance.now() - startedAt) / 1000) * current.fps * rate)
-        const spanNow = Math.max(1, (current.frameCount || current.columns * current.rows) - startFrame)
-        prevImg = images.get(current.id)
-        prevAnimationId = current.id
-        prevFrame = startFrame + (elapsedNow % spanNow)
-        fadeStart = performance.now()
+      if (!images.has(next.id)) {
+        // 图片没加载完就先不切：继续显示当前动画，加载完由 draw 里补播，避免白屏一下
+        pendingPlay = { id, once: playOnce, hold: holdLast, from, onEnd }
+        void loadOne(next)
+        return
       }
-      current = next
-      once = playOnce
-      hold = holdLast
-      onEndCb = onEnd ?? null
-      startFrame = Math.max(0, from ?? next.startFrame ?? 0)
-      startedAt = performance.now()
+      pendingPlay = null
+      applyPlay(next, playOnce, holdLast, from, onEnd)
     },
     current: () => current.id,
     destroy: () => {
@@ -341,7 +418,11 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
       disposed = true
       window.clearInterval(watchdog)
       lastGood = null
+      // 真正释放位图：清 src 并断开引用，否则每次更新重载都留一份 110MB 解码内存
+      for (const img of images.values()) img.src = ''
       images.clear()
+      fits.clear()
+      pendingPlay = null
     },
   }
 }

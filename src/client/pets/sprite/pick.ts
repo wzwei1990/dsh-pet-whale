@@ -108,3 +108,16 @@ export function decideIdleRotation(input: RotationInput, pick: (ids: readonly st
   const next = pool.length <= 1 ? pool[0] : (pick(pool, 'idle') ?? idleId)
   return { play: next ?? idleId, rotations, reschedule: true }
 }
+
+/**
+ * 防止"同一个动作连续播好几轮"：
+ * 洗牌袋与"进入待机时抽一次"共用袋子，偶尔会出现 pick 回来正好等于当前动作，
+ * 调用方若直接跳过播放，就会让这个动作再显示一整轮（表现成连续重复 2–3 次）。
+ * 这里保证返回值与 lastTarget 不同（池子只有一个时除外）。
+ */
+export function avoidSame(play: string | undefined, lastTarget: string, pool: readonly string[], pick: (ids: readonly string[], key: string) => string | undefined): string | undefined {
+  if (play !== lastTarget) return play
+  if (pool.length <= 1) return pool[0]
+  const others = pool.filter((id) => id !== lastTarget)
+  return pick(others, 'idle') ?? others[0]
+}

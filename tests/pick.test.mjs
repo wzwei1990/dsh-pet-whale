@@ -129,3 +129,11 @@ test('轮换决策：池子变化后只会给新池里的动作', () => {
   const d = decideIdleRotation({ lastTarget: 'idle', pool: ['state-wait', 'idle-mirror'], activities: [], rotations: 7, idleId: 'idle' }, (ids) => ids[1])
   assert.equal(d.play, 'idle-mirror')
 })
+
+import { avoidSame } from '../lib/pick.mjs'
+
+test('轮换抽到与当前相同的动作时换一个（防连续重复多轮）', () => {
+  assert.equal(avoidSame('a', 'a', ['a', 'b', 'c'], () => 'c'), 'c')
+  assert.equal(avoidSame('b', 'a', ['a', 'b'], () => 'b'), 'b', '本来不同就原样返回')
+  assert.equal(avoidSame('a', 'a', ['a'], () => undefined), 'a', '单元素池无法避免')
+})

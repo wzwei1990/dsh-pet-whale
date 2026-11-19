@@ -17,7 +17,7 @@ import type { PetModule } from '../types'
 import { DAFEIYU_TEXT } from '../dafeiyu/text'
 import { animationOf, loadSpritePack, type SpritePack } from './manifest'
 import { createSpritePlayer, type SpritePlayer } from './player'
-import { createPoolPicker, decideIdleRotation } from './pick'
+import { avoidSame, createPoolPicker, decideIdleRotation } from './pick'
 
 /** 素材包路由（Node 半 src/index.mjs 挂的静态路由） */
 const PACK_BASE = '/pet-whale/sprite/dafeiyu-sprite/'
@@ -270,11 +270,13 @@ export const spritePet: PetModule = {
           pickFresh,
         )
         idleRotations = decision.rotations
-        if (decision.play !== undefined && decision.play !== lastTarget) {
-          lastTarget = decision.play
-          lastIdlePick = decision.play
+        // 抽回来正好是当前动作时换一个，避免它再显示一整轮（连续重复 2–3 次）
+        const chosen = avoidSame(decision.play, lastTarget, idlePool(), pickFresh)
+        if (chosen !== undefined && chosen !== lastTarget) {
+          lastTarget = chosen
+          lastIdlePick = chosen
           lastOnce = false
-          player.play(decision.play)
+          player.play(chosen)
         }
         if (decision.reschedule) scheduleIdleRotate()
       }, pack?.choreography?.rotationMs ?? 25_000)
@@ -502,10 +504,9 @@ export const spritePet: PetModule = {
       }
       const anim = pack?.states?.[emotion] ?? EMOTION_ANIM[emotion]
       if (!anim) return
-      // 让非精灵宠物也能响应（moc3 以后接）
-      try {
-        window.dispatchEvent(new CustomEvent('pet-whale-react', { detail: { emotion } }))
-      } catch { /* 忽略 */ }
+      // 注意：**不要在这里再派发 pet-whale-react**。
+      // 精灵自己就监听这个事件，再派发就是 applyReaction → dispatch → applyReaction 无限递归
+      // （控制台 Maximum call stack size exceeded，更新插件时新旧 bundle 同时存在会直接卡死页面，2026-11-19 定位）。
       reactionAnim = anim
       // hold=true：一直保持到下次调用；否则按 durationMs 到期回落
       if (reactionEndTimer !== 0) {
