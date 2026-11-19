@@ -137,3 +137,23 @@ test('轮换抽到与当前相同的动作时换一个（防连续重复多轮�
   assert.equal(avoidSame('b', 'a', ['a', 'b'], () => 'b'), 'b', '本来不同就原样返回')
   assert.equal(avoidSame('a', 'a', ['a'], () => undefined), 'a', '单元素池无法避免')
 })
+
+import { computeFit } from '../lib/pick.mjs'
+
+test('取景缩放固定：不同包围盒的动作缩放一致（防忽大忽小）', () => {
+  const idle = { x0: 100, y0: 60, w: 400, h: 300 }
+  const a = computeFit({ x0: 120, y0: 40, w: 380, h: 320 }, idle, 640, 360)
+  const b = computeFit({ x0: 60, y0: 100, w: 520, h: 260 }, idle, 640, 360)
+  assert.equal(a.scale, b.scale, '缩放必须相同')
+  assert.ok(Math.abs(a.scale - (360 * 0.92) / 300) < 1e-9, '缩放按待机包围盒计算')
+})
+
+test('取景：每段动作按自己的包围盒居中且贴底', () => {
+  const idle = { x0: 100, y0: 60, w: 400, h: 300 }
+  const box = { x0: 200, y0: 100, w: 200, h: 260 }
+  const fit = computeFit(box, idle, 640, 360)
+  const bottom = (box.y0 + box.h) * fit.scale + fit.dy
+  assert.ok(Math.abs(bottom - 360 * 0.98) < 1e-6, '底部对齐')
+  const center = (box.x0 + box.w / 2) * fit.scale + fit.dx
+  assert.ok(Math.abs(center - 320) < 1e-6, '水平居中')
+})

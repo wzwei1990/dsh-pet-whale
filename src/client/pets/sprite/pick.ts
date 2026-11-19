@@ -121,3 +121,17 @@ export function avoidSame(play: string | undefined, lastTarget: string, pool: re
   const others = pool.filter((id) => id !== lastTarget)
   return pick(others, 'idle') ?? others[0]
 }
+
+/** 取景：缩放固定（按基础待机包围盒），每段动画只按自己的包围盒居中/贴底 */
+export interface Box { x0: number; y0: number; w: number; h: number }
+export interface Fit { scale: number; dx: number; dy: number }
+
+export function computeFit(bbox: Box, idleBox: Box | null, canvasW: number, canvasH: number): Fit {
+  const ref = idleBox ?? bbox
+  const scale = (canvasH * 0.92) / ref.h
+  return {
+    scale,
+    dx: canvasW / 2 - (bbox.x0 + bbox.w / 2) * scale,
+    dy: canvasH - (bbox.y0 + bbox.h) * scale - canvasH * 0.02,
+  }
+}
