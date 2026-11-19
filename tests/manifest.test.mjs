@@ -19,7 +19,6 @@ test('所有池子引用的动作都存在', () => {
     hover: manifest.hover?.animationIds ?? [],
     activities: manifest.choreography?.activities ?? [],
     workingPool: manifest.states?.workingPool ?? [],
-    thinkPool: manifest.states?.thinkPool ?? [],
     ...Object.fromEntries(Object.entries(manifest.choreography?.periods ?? {}).map(([k, v]) => ['period:' + k, v])),
   }
   for (const [name, pool] of Object.entries(pools)) {
@@ -55,7 +54,7 @@ test('发呆/深度碎碎念已从说话池移出，归入合适分类', () => {
   assert.ok(!talk.includes('talk-deep'), '深度碎碎念不应在说话池')
   const idlePools = Object.values(manifest.choreography.periods).flat()
   assert.ok(idlePools.includes('talk-mumble-daze'), '发呆碎碎念应落在待机池')
-  assert.ok((manifest.states.thinkPool ?? []).includes('talk-deep'), '深度碎碎念应作为思考变体')
+  assert.ok((manifest.choreography.activities ?? []).includes('talk-deep'), '深度碎碎念应归自娱池，不作为思考动作')
 })
 
 test('表演类动作分到自娱池，打电话归待机池', () => {

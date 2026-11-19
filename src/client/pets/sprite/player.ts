@@ -39,6 +39,27 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
 
   // 预载全部动作图（8 个 ≈ 7.6MB，一次载完最省心；多了再改成按需）
   const images = new Map<string, HTMLImageElement>()
+  /** 解码图缓存上限：显示只用到 1–2 张，没必要让几十张位图常驻（实测 44 张 ≈ 1.2GB 会卡死页面） */
+  const CACHE_MAX = 10
+  const lru: string[] = []
+  const touchImage = (id: string): void => {
+    const i = lru.indexOf(id)
+    if (i >= 0) lru.splice(i, 1)
+    lru.push(id)
+  }
+  let prevAnimationId = ''
+  const evictImages = (currentId: string, idleId: string): void => {
+    while (lru.length > CACHE_MAX) {
+      const victim = lru.find((id) => id !== currentId && id !== idleId && id !== prevAnimationId)
+      if (victim === undefined) break
+      const i = lru.indexOf(victim)
+      if (i >= 0) lru.splice(i, 1)
+      const img = images.get(victim)
+      images.delete(victim)
+      // 释放解码位图：清掉 src，交给 GC
+      if (img !== undefined) img.src = ''
+    }
+  }
   /** 正在加载中的动作（避免重复发起） */
   const loading = new Set<string>()
   let disposed = false
@@ -51,6 +72,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
         loading.delete(anim.id)
         if (disposed) return resolve()
         images.set(anim.id, img)
+        touchImage(anim.id)
         resolve()
       }
       img.onerror = () => {
@@ -309,11 +331,14 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
       const next = pack.animations.find((a) => a.id === id)
       if (!next) return
       if (!images.has(next.id)) void loadOne(next)
+      touchImage(next.id)
+      evictImages(next.id, pack.idleAnimationId)
       if (next.id !== current.id) {
         // 记下当前帧，切换后 120ms 内做交叉淡入
         const elapsedNow = Math.floor(((performance.now() - startedAt) / 1000) * current.fps * rate)
         const spanNow = Math.max(1, (current.frameCount || current.columns * current.rows) - startFrame)
         prevImg = images.get(current.id)
+        prevAnimationId = current.id
         prevFrame = startFrame + (elapsedNow % spanNow)
         fadeStart = performance.now()
       }
