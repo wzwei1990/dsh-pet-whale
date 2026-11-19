@@ -10,6 +10,17 @@ export default [
     clean: true,
   },
   {
+    // 纯逻辑模块单独出一份，供 Node 单测直接 import（不打进 client bundle 也行得通）
+    name: 'pet-whale/pick',
+    entry: { pick: 'src/client/pets/sprite/pick.ts' },
+    outDir: 'lib',
+    format: 'esm',
+    platform: 'neutral',
+    dts: false,
+    clean: false,
+    outputOptions: { entryFileNames: 'pick.mjs' },
+  },
+  {
     name: 'pet-whale/client',
     entry: { client: 'src/client/index.ts' },
     outDir: 'lib',

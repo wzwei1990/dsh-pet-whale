@@ -17,6 +17,7 @@ import type { PetModule } from '../types'
 import { DAFEIYU_TEXT } from '../dafeiyu/text'
 import { animationOf, loadSpritePack, type SpritePack } from './manifest'
 import { createSpritePlayer, type SpritePlayer } from './player'
+import { createPoolPicker, decideIdleRotation } from './pick'
 
 /** 素材包路由（Node 半 src/index.mjs 挂的静态路由） */
 const PACK_BASE = '/pet-whale/sprite/dafeiyu-sprite/'
@@ -68,6 +69,8 @@ function periodOf(hour: number): string {
 }
 
 let reactionAnim = ''
+/** 定时表情的到期 timer（余额/celebrate 等）：到期主动 sync 回落 */
+let reactionEndTimer = 0
 let reactionUntil = 0
 let applyReaction: ((emotion: string, hold?: boolean, durationMs?: number) => void) | null = null
 let reactionCursor = 0
@@ -255,64 +258,31 @@ export const spritePet: PetModule = {
       clearIdleRotate()
       idleRotateTimer = window.setTimeout(() => {
         idleRotateTimer = 0
-        if (!player || !pack || speaking) return
-        if (lastTarget !== pack.idleAnimationId && !idlePool().includes(lastTarget)) return
-        const pool = idlePool()
-        const card = pack
-        const acts = (card?.choreography?.activities ?? []).filter((id: string) => card?.animations.some((a) => a.id === id))
-        idleRotations += 1
-        if (acts.length > 0 && idleRotations % 3 === 0) {
-          const picked = pickFresh(acts, 'activity')
-          if (picked) {
-            lastTarget = picked
-            lastOnce = false
-            player.play(picked)
-            scheduleIdleRotate()
-            return
-          }
+        if (!player || !pack) return
+        // 说话期间不换：但必须重排，否则说完就再也轮换不了
+        if (speaking) {
+          scheduleIdleRotate()
+          return
         }
-        if (pool.length <= 1) return
-        const next = pickFresh(pool, 'idle') ?? pack.idleAnimationId
-        lastIdlePick = next
-        lastTarget = next ?? pack.idleAnimationId
-        lastOnce = false
-        player.play(lastTarget)
-        scheduleIdleRotate()
+        const actIds = (pack.choreography?.activities ?? []).filter((id) => pack?.animations.some((a) => a.id === id))
+        const decision = decideIdleRotation(
+          { lastTarget, pool: idlePool(), activities: actIds, rotations: idleRotations, idleId: pack.idleAnimationId },
+          pickFresh,
+        )
+        idleRotations = decision.rotations
+        if (decision.play !== undefined && decision.play !== lastTarget) {
+          lastTarget = decision.play
+          lastIdlePick = decision.play
+          lastOnce = false
+          player.play(decision.play)
+        }
+        if (decision.reschedule) scheduleIdleRotate()
       }, pack?.choreography?.rotationMs ?? 25_000)
     }
     let lastIdlePick = ''
-    /**
-     * 同池挑选：洗牌袋（shuffle bag）。
-     * 每次把池子打乱后依次取，取完重新洗；新一轮的第一个不会和上一轮最后一个相同。
-     * 这样每一轮顺序都随机，且不会短周期内重复（用户 2026-11-19 明确口径：只按同一类型随机，不同类型之间不限制）。
-     */
-    const poolBags: Record<string, string[]> = {}
-    const poolLast: Record<string, string> = {}
-    const pickFresh = (ids: string[] | undefined, key: string): string | undefined => {
-      const valid = (ids ?? []).filter((id) => pack?.animations.some((a) => a.id === id))
-      if (valid.length === 0) return undefined
-      if (valid.length === 1) return valid[0]
-      let bag = poolBags[key]
-      if (bag === undefined || bag.length === 0) {
-        bag = [...valid]
-        for (let i = bag.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1))
-          const t = bag[i]
-          bag[i] = bag[j]
-          bag[j] = t
-        }
-        // 新一轮第一个别和上一轮最后一个撞
-        if (bag.length > 1 && bag[0] === poolLast[key]) {
-          const t = bag[0]
-          bag[0] = bag[1]
-          bag[1] = t
-        }
-        poolBags[key] = bag
-      }
-      const picked = bag.shift()
-      if (picked !== undefined) poolLast[key] = picked
-      return picked
-    }
+    /** 同池随机：洗牌袋（逻辑在 ./pick.ts，有单测） */
+    const picker = createPoolPicker((id) => pack?.animations.some((a) => a.id === id) ?? false)
+    const pickFresh = (ids: readonly string[] | undefined, key: string): string | undefined => picker.pick(ids, key)
 
     /** 上一次 working 变体：保证随机但不连续重复 */
     let lastWorkingState = ''
@@ -436,19 +406,10 @@ export const spritePet: PetModule = {
         speaking = false
         sync()
       }, 900)
-      ;(window as unknown as { __pwhSpriteState?: unknown }).__pwhSpriteState = {
-        speaking: on,
-        anim: on ? lastTarget : pack?.idleAnimationId ?? '',
-      }
-      if (on) playTalk()
-      else {
-        lastTarget = ''
-        lastOnce = false
-        if (player && pack) {
-          lastTarget = pack.idleAnimationId
-          player.play(pack.idleAnimationId)
-        }
-      }
+      // 注意：这里不能直接播 idle。
+      // 之前每句 TTS 结束时都强制 player.play(idle)，绕过了状态优先级：
+      // 工具调用中（working）会瞬间跳成待机动画，900ms 后才被 sync 纠正。
+      // 现在只排 900ms 的关闭计时，真正回落交给 sync 按优先级决定。
     }
     ;(window as unknown as { __pwhSpeak?: { start: () => void; stop: () => void } }).__pwhSpeak = {
       start: () => setSpeaking(true),
@@ -465,6 +426,10 @@ export const spritePet: PetModule = {
     ensureActivityTracker()
     applyReaction = (emotion: string, hold = false, durationMs = 6000): void => {
       if (emotion === 'idle') {
+        if (reactionEndTimer !== 0) {
+          clearTimeout(reactionEndTimer)
+          reactionEndTimer = 0
+        }
         reactionAnim = ''
         reactionUntil = 0
         sync()
@@ -478,7 +443,22 @@ export const spritePet: PetModule = {
       } catch { /* 忽略 */ }
       reactionAnim = anim
       // hold=true：一直保持到下次调用；否则按 durationMs 到期回落
-      reactionUntil = hold ? Number.POSITIVE_INFINITY : performance.now() + durationMs
+      if (reactionEndTimer !== 0) {
+        clearTimeout(reactionEndTimer)
+        reactionEndTimer = 0
+      }
+      if (hold) {
+        reactionUntil = Number.POSITIVE_INFINITY
+      } else {
+        reactionUntil = performance.now() + durationMs
+        // 到期必须主动 sync：之前只靠"下一个事件"触发，闲置时没有事件 → 动作一直循环
+        reactionEndTimer = window.setTimeout(() => {
+          reactionEndTimer = 0
+          reactionAnim = ''
+          reactionUntil = 0
+          sync()
+        }, durationMs)
+      }
       sync()
     }
     // 重新挂载时如果语音还在播（隐藏期间开始的），立刻接上说话动作
@@ -495,6 +475,7 @@ export const spritePet: PetModule = {
       window.removeEventListener('pet-whale-react', onReactEvent)
       clearIdleRotate()
       if (speakOffTimer !== 0) clearTimeout(speakOffTimer)
+      if (reactionEndTimer !== 0) clearTimeout(reactionEndTimer)
       applySpeaking = null
       applyReaction = null
       delete (window as unknown as { __pwhSpeak?: unknown }).__pwhSpeak

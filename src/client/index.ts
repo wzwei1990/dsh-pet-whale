@@ -2173,14 +2173,13 @@ export function apply(ctx: Context): () => void {
    * 2026-11-18 用户反馈"眯一会的特效和别的动画冲突"。
    */
   const sleepVisual = (on: boolean): void => {
-    const hook = (window as unknown as { __pwhSpriteSleep?: (value: boolean) => void }).__pwhSpriteSleep
-    if (typeof hook === 'function') {
-      hook(on)
+    // 精灵帧走统一事件通道（不依赖 mount 时挂的钩子——以前钩子缺席就静默不播，
+    // 表现成"先眯一会儿"文字出现但动画还是待机，2026-11-19 用户反馈）
+    if (activePet.aquatic !== true) {
+      window.dispatchEvent(new CustomEvent('pet-whale-react', { detail: { emotion: on ? 'sleep' : 'wake', hold: on } }))
       return
     }
-    // 只有鲸鱼用 .sleeping 特效；其他宠物（moc3 等）拿不到钩子就什么都不加，
-    // 避免"特效和动画不匹配"（2026-11-18 用户反馈）
-    if (activePet.id !== 'whale') return
+    // 鲸鱼：沿用 .sleeping 特效（Zzz + 呼吸）
     if (on) root.classList.add('sleeping')
     else root.classList.remove('sleeping')
   }
@@ -2229,7 +2228,7 @@ export function apply(ctx: Context): () => void {
       const dy = Math.max(r.top - e.clientY, 0, e.clientY - r.bottom)
       return dx <= 160 && dy <= 160
     })()
-    if (near) markActive()
+    if (near && !sleeping) markActive()
     // 躲避判定自带守卫，且不能被下面追光的 rAF 节流挡掉，所以放在 early-return 之前
     maybeAvoid(e)
     maybePat(e)
