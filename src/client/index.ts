@@ -614,6 +614,9 @@ export function apply(ctx: Context): () => void {
   // ===== 戳戳 / 翻滚 / 开心 / 戳晕 / 欢迎 =====
   const triggerSquish = () => {
     markActive()
+  // "假装工作"是持久开关：重启后仍生效（状态被强制成 working）。
+  // 启动时提示一次，避免用户以为自己卡在干活动画里（2026-11-19 用户反馈）。
+  if (pretendOn) later(() => showDialog(strings.feedback.pretendOn), 1200)
     recordInteraction()
     popBubble()
     sounds.play('bubble')

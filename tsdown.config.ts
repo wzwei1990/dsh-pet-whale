@@ -10,6 +10,17 @@ export default [
     clean: true,
   },
   {
+    // 状态机单独出一份，供 Node 单测（卡死兜底 / 瞬态回落）
+    name: 'pet-whale/state',
+    entry: { state: 'src/client/state.ts' },
+    outDir: 'lib',
+    format: 'esm',
+    platform: 'neutral',
+    dts: false,
+    clean: false,
+    outputOptions: { entryFileNames: 'state.mjs' },
+  },
+  {
     // 纯逻辑模块单独出一份，供 Node 单测直接 import（不打进 client bundle 也行得通）
     name: 'pet-whale/pick',
     entry: { pick: 'src/client/pets/sprite/pick.ts' },

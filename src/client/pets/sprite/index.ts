@@ -286,8 +286,17 @@ export const spritePet: PetModule = {
 
     /** 上一次 working 变体：保证随机但不连续重复 */
     let lastWorkingState = ''
-    /** 本段 working 选定的动作：保持到离开 working 为止，避免每次 sync 重掷 */
+    /** 当前 working 变体（每轮换周期换一次，不是整个回合固定） */
     let workingPicked = ''
+    /** working 轮换定时器：长任务期间按时换动作 */
+    let workingRotateTimer = 0
+    const clearWorkingRotate = (): void => {
+      if (workingRotateTimer !== 0) {
+        clearTimeout(workingRotateTimer)
+        workingRotateTimer = 0
+      }
+    }
+    const WORKING_ROTATE_MS = 20_000
     /** 上一次自娱动作：保证不连续重复 */
     let lastActivity = ''
     /** 待机轮换计数：每 3 次插一次"自娱自乐"长动作 */
@@ -334,14 +343,31 @@ export const spritePet: PetModule = {
       const workingPool = pack.states?.workingPool
       let workingAnim: string | undefined
       if (running === 'working' && workingPool !== undefined && workingPool.length > 0) {
-        // 只在还没选 / 选的失效时掷一次；之后保持，直到离开 working
         if (workingPicked === '' || !workingPool.includes(workingPicked)) {
           const picked = pickFresh(workingPool, 'working')
           if (picked !== undefined) workingPicked = picked
         }
         workingAnim = workingPicked
+        // 长任务：每 WORKING_ROTATE_MS 换一个 working 变体（两个干活动画轮流）
+        if (workingRotateTimer === 0) {
+          workingRotateTimer = window.setTimeout(() => {
+            workingRotateTimer = 0
+            if (!player || !pack) return
+            const stillWorking = STATE_CLASSES.some((name) => el.classList.contains(name) && name === 'working')
+            if (!stillWorking) return
+            const pool = pack.states?.workingPool
+            if (pool === undefined || pool.length === 0) return
+            const picked = pickFresh(pool, 'working')
+            if (picked !== undefined) {
+              workingPicked = picked
+              lastWorkingState = picked
+            }
+            sync()
+          }, WORKING_ROTATE_MS)
+        }
       } else if (running !== 'working') {
         workingPicked = ''
+        clearWorkingRotate()
       }
       const stateAnim = workingAnim ?? (running ? pack.states?.[running] : undefined)
       const hasStateAnim = stateAnim !== undefined && pack.animations.some((a) => a.id === stateAnim)
@@ -474,6 +500,7 @@ export const spritePet: PetModule = {
       el.removeEventListener('mouseenter', onEnter)
       window.removeEventListener('pet-whale-react', onReactEvent)
       clearIdleRotate()
+      clearWorkingRotate()
       if (speakOffTimer !== 0) clearTimeout(speakOffTimer)
       if (reactionEndTimer !== 0) clearTimeout(reactionEndTimer)
       applySpeaking = null

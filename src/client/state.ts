@@ -69,6 +69,13 @@ export interface WhaleSnapshot {
   pending?: readonly unknown[]
 }
 
+/**
+ * running=true 但长时间没有任何信号（无工具调用、无流式文本变化）时，
+ * 判定为"快照卡住"（典型：DSH 重启后会话快照仍显示 running）→ 回落 idle。
+ * 否则宠物会一直播 working，看起来像卡死（2026-11-19 用户反馈）。
+ */
+export const STALE_RUNNING_MS = 30_000
+
 export const ERROR_MS = 4000
 export const DISAPPOINTED_MS = 2600
 export const CELEBRATE_MS = 2500
@@ -108,6 +115,9 @@ export class WhaleDriver {
   /** 离开 working/think 后保持该动作的截止时间：工具间隙别闪回待机 */
   private activeUntil = 0
   private current: WhaleState = 'idle'
+  /** 最近一次收到"回合内信号"（工具活动 / 流式文本长度变化）的时间 */
+  private lastSignalAt = 0
+  private lastPartialLen = -1
 
   /** 首帧初始化基线（不触发任何瞬态）。 */
   prime(snap: WhaleSnapshot): void {
@@ -155,6 +165,17 @@ export class WhaleDriver {
       // 免得把计数和后面的边沿判断错开。
       this.prevTurnEnds = snap.turnEnds.size
     }
+    // 回合内信号：工具在飞，或流式文本长度发生变化（模型正在吐字）
+    if (snap.running) {
+      const partialLen = typeof snap.partial === 'string' ? snap.partial.length : -1
+      if (hasToolActivity(snap) || partialLen !== this.lastPartialLen) {
+        this.lastSignalAt = now
+        this.lastPartialLen = partialLen
+      }
+    } else {
+      this.lastSignalAt = now
+      this.lastPartialLen = -1
+    }
     this.prevRunning = snap.running
 
     // working 粘滞：见到工具活动就刷新窗口；回合结束清掉
@@ -179,6 +200,12 @@ export class WhaleDriver {
     } else {
       next = deriveContinuous(snap, this.stickyUntil, now)
     }
+    // 快照卡死兜底：running 但 30 秒没有任何信号 → 当作空闲（重启后常见）
+    if (snap.running && (next === 'working' || next === 'think') && now - this.lastSignalAt > STALE_RUNNING_MS) {
+      next = 'idle'
+      this.stickyUntil = null
+    }
+
     // 工具间隙抖动：快照偶发 running=false / 无工具活动时，别立刻切回待机
     // （表现为"工具调用中却播待机东张西望"，2026-11-18 用户反馈）
     if (next === 'working' || next === 'think') this.activeUntil = now + 4000
@@ -211,6 +238,8 @@ export class WhaleDriver {
     this.stickyUntil = null
     this.transient = null
     this.current = 'idle'
+    this.lastSignalAt = 0
+    this.lastPartialLen = -1
     this.activeUntil = 0
     this.prevError = null
     this.prevTurnEnds = 0
