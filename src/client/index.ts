@@ -806,6 +806,7 @@ export function apply(ctx: Context): () => void {
     void pet.offsetWidth
     pet.classList.add('welcome', 'spouting')
     showDialog(pick(strings.feedback.restNudge))
+    reactSprite('stretch')
     sounds.play('bubble')
     expireClass(pet, 'welcome', 1400)
     expireClass(pet, 'spouting', 1400)
@@ -1225,6 +1226,10 @@ export function apply(ctx: Context): () => void {
               showDialog(strings.feedback.feed)
               later(() => {
                 triggerJoy()
+                // 非鲸鱼没有 joy 的 CSS 动画：派发情绪让精灵帧播"庆祝"
+                if (activePet.aquatic !== true) {
+                  window.dispatchEvent(new CustomEvent('pet-whale-react', { detail: { emotion: 'eat' } }))
+                }
               }, 600)
             },
           ],
@@ -1232,6 +1237,9 @@ export function apply(ctx: Context): () => void {
             strings.menu.headpat,
             () => {
               triggerPat()
+              if (activePet.aquatic !== true) {
+                window.dispatchEvent(new CustomEvent('pet-whale-react', { detail: { emotion: 'shy' } }))
+              }
             },
           ],
           [
@@ -1417,13 +1425,16 @@ export function apply(ctx: Context): () => void {
           menu.classList.remove('open')
           openPackImport()
         })
-        appendMenuBtn(`${strings.panel.swim}${swimmer.isEnabled ? ' ✓' : ''}`, () => {
-          const next = swimmer.toggle()
-          showDialog(next ? strings.feedback.swimOn : strings.feedback.swimOff)
-          buildMenu('behavior')
-          menu.classList.add('open')
-          positionMenu(lastMenuPos.x, lastMenuPos.y)
-        })
+        // 非水生宠物没有"游动"能力，隐藏这个开关（2026-11-18：文字/动画对应检查）
+        if (activePet.aquatic === true) {
+          appendMenuBtn(`${strings.panel.swim}${swimmer.isEnabled ? ' ✓' : ''}`, () => {
+            const next = swimmer.toggle()
+            showDialog(next ? strings.feedback.swimOn : strings.feedback.swimOff)
+            buildMenu('behavior')
+            menu.classList.add('open')
+            positionMenu(lastMenuPos.x, lastMenuPos.y)
+          })
+        }
         // 音量：静音 → 小 → 中 → 大 → 静音；换完响一声让人听到新音量
         appendMenuBtn(strings.panel.volume(sounds.isMuted ? strings.panel.volumeOff : strings.panel.volumeNames[VOLUME_LEVELS.indexOf(sounds.volume)]), () => {
           if (sounds.isMuted) {
@@ -2020,6 +2031,12 @@ export function apply(ctx: Context): () => void {
    * 台词有独立冷却，不然沿着边拖一路会一直喊。
    */
   let squeezeSaidAt = 0
+  /** 非水生宠物没有挤压 CSS：用帧动画表示"被挤扁 / 伸懒腰" */
+  const reactSprite = (emotion: string, hold = false): void => {
+    if (activePet.aquatic === true) return
+    window.dispatchEvent(new CustomEvent('pet-whale-react', { detail: { emotion, hold } }))
+  }
+  let spriteSqueezed = false
   const updateEdge = (x: number, y: number) => {
     const maxX = Math.max(0, window.innerWidth - PET_W())
     const maxY = Math.max(0, window.innerHeight - PET_H())
@@ -2033,7 +2050,12 @@ export function apply(ctx: Context): () => void {
     root.classList.toggle('edge-right', onRight)
     root.classList.toggle('edge-top', onTop)
     root.classList.toggle('edge-bottom', onBottom)
-    if (!sideways && !onTop && !onBottom) return
+    const squeezed = sideways || onTop || onBottom
+    if (squeezed !== spriteSqueezed) {
+      spriteSqueezed = squeezed
+      reactSprite(squeezed ? 'squeeze' : 'idle', squeezed)
+    }
+    if (!squeezed) return
     const now = performance.now()
     if (now - squeezeSaidAt < 4000) return
     squeezeSaidAt = now
@@ -2047,6 +2069,10 @@ export function apply(ctx: Context): () => void {
   }
   const clearEdge = () => {
     root.classList.remove('edge-left', 'edge-right', 'edge-top', 'edge-bottom')
+    if (spriteSqueezed) {
+      spriteSqueezed = false
+      reactSprite('idle')
+    }
   }
 
   /** 拖着不放又不动：三秒后开始扭 */

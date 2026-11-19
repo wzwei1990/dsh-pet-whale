@@ -42,6 +42,7 @@ const EMOTION_ANIM: Record<string, string> = {
   error: 'state-error',
   sleep: 'state-sleep',
   wake: 'state-wake',
+  eat: 'eat-lunch',
   'balance-rich': 'balance-rich',
   'balance-normal': 'balance-normal',
   'balance-empty': 'balance-empty',
@@ -204,6 +205,13 @@ export const spritePet: PetModule = {
 
     el.addEventListener('click', onClick)
     el.addEventListener('mouseenter', onEnter)
+    // 菜单里的"喂食/摸头"等动作派发这个事件 → 精灵也播对应帧动画
+    const onReactEvent: EventListener = (event) => {
+      const detail = (event as CustomEvent<{ emotion?: string; hold?: boolean }>).detail
+      const emotion = detail?.emotion
+      if (typeof emotion === 'string' && emotion !== '') applyReaction?.(emotion, detail?.hold === true)
+    }
+    window.addEventListener('pet-whale-react', onReactEvent)
 
     // 插件的 dragging / swimming 都加在**根容器**上（endDrag 里 root.classList.remove('dragging')），
     // 之前只查宠物元素的 class → 拖拽动画永远不触发（2026-11-17 实测：提起既不播动作也闪）。
@@ -285,6 +293,8 @@ export const spritePet: PetModule = {
     let lastIdlePick = ''
     /** 上一次 working 变体：保证随机但不连续重复 */
     let lastWorkingState = ''
+    /** 本段 working 选定的动作：保持到离开 working 为止，避免每次 sync 重掷 */
+    let workingPicked = ''
     /** 上一次自娱动作：保证不连续重复 */
     let lastActivity = ''
     /** 待机轮换计数：每 3 次插一次"自娱自乐"长动作 */
@@ -331,13 +341,19 @@ export const spritePet: PetModule = {
       const workingPool = pack.states?.workingPool
       let workingAnim: string | undefined
       if (running === 'working' && workingPool !== undefined && workingPool.length > 0) {
-        const choices = workingPool.filter((id) => id !== lastWorkingState && (pack?.animations.some((a) => a.id === id) ?? false))
-        const pool = choices.length > 0 ? choices : workingPool
-        const picked = pool[Math.floor(Math.random() * pool.length)]
-        if (picked !== undefined) {
-          workingAnim = picked
-          lastWorkingState = picked
+        // 只在还没选 / 选的失效时掷一次；之后保持，直到离开 working
+        if (workingPicked === '' || !workingPool.includes(workingPicked)) {
+          const choices = workingPool.filter((id) => id !== lastWorkingState && (pack?.animations.some((a) => a.id === id) ?? false))
+          const pool = choices.length > 0 ? choices : workingPool
+          const picked = pool[Math.floor(Math.random() * pool.length)]
+          if (picked !== undefined) {
+            workingPicked = picked
+            lastWorkingState = picked
+          }
         }
+        workingAnim = workingPicked
+      } else if (running !== 'working') {
+        workingPicked = ''
       }
       const stateAnim = workingAnim ?? (running ? pack.states?.[running] : undefined)
       const hasStateAnim = stateAnim !== undefined && pack.animations.some((a) => a.id === stateAnim)
@@ -351,8 +367,11 @@ export const spritePet: PetModule = {
         const pool = idlePool()
         // 已经在播待机池里的动作：保持不动，别每次 sync 都重掷骰子
         const alreadyIdle = pool.includes(lastTarget)
-        if (pool.length > 1 && !alreadyIdle) {
-          // 进入待机时随机换一段（避免永远从同一个呼吸动作开始）
+        if (alreadyIdle) {
+          // 已经在待机池里：**保持当前动作**，别被重置回 idleAnimationId
+          target = lastTarget
+        } else if (pool.length > 1) {
+          // 进入待机时随机换一段（排除上一段和当前）
           const choices = pool.filter((id) => id !== lastIdlePick && id !== lastTarget)
           const picked = choices[Math.floor(Math.random() * choices.length)] ?? pool[0]
           lastIdlePick = picked ?? pack.idleAnimationId
@@ -456,6 +475,7 @@ export const spritePet: PetModule = {
       disposed = true
       el.removeEventListener('click', onClick)
       el.removeEventListener('mouseenter', onEnter)
+      window.removeEventListener('pet-whale-react', onReactEvent)
       clearIdleRotate()
       if (speakOffTimer !== 0) clearTimeout(speakOffTimer)
       applySpeaking = null

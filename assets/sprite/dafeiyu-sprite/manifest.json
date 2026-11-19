@@ -520,6 +520,32 @@
    "frameCount": 120,
    "fps": 12,
    "startFrame": 0
+  },
+  {
+   "id": "state-squash",
+   "name": "Squash",
+   "label": "被压扁",
+   "file": "spritesheet/state-squash.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 29
+  },
+  {
+   "id": "state-stretch",
+   "name": "Stretch",
+   "label": "伸懒腰",
+   "file": "spritesheet/state-stretch.webp",
+   "columns": 8,
+   "rows": 15,
+   "frameWidth": 640,
+   "frameHeight": 360,
+   "frameCount": 120,
+   "fps": 12,
+   "startFrame": 30
   }
  ],
  "playbackRate": 1.2,
@@ -548,7 +574,9 @@
   "workingPool": [
    "state-working",
    "state-archive"
-  ]
+  ],
+  "squeeze": "state-squash",
+  "stretch": "state-stretch"
  },
  "idleAnimationIds": [
   "idle",
