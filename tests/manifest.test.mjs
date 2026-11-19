@@ -69,3 +69,26 @@ test('表演类动作分到自娱池，打电话归待机池', () => {
     assert.ok(!talk.includes(id), `${id} 不应在说话池（不是说话动作）`)
   }
 })
+
+/** 读 WebP(VP8X) 画布尺寸，用于校验"网格声明 == 实际图片尺寸" */
+function webpSize(file) {
+  const buf = readFileSync(file)
+  if (buf.toString('latin1', 0, 4) !== 'RIFF' || buf.toString('latin1', 8, 12) !== 'WEBP') return null
+  if (buf.toString('latin1', 12, 16) !== 'VP8X') return null
+  const w = 1 + (buf[24] | (buf[25] << 8) | (buf[26] << 16))
+  const h = 1 + (buf[27] | (buf[28] << 8) | (buf[29] << 16))
+  return { w, h }
+}
+
+test('网格声明与图片实际尺寸一致（防串帧/裁切）', () => {
+  let checked = 0
+  for (const a of manifest.animations) {
+    const size = webpSize(join(root, 'assets/sprite/dafeiyu-sprite', a.file))
+    if (size === null) continue
+    checked++
+    assert.equal(size.w, a.frameWidth * a.columns, `${a.id} 宽度不符：图片 ${size.w}，声明 ${a.frameWidth * a.columns}`)
+    assert.equal(size.h, a.frameHeight * a.rows, `${a.id} 高度不符：图片 ${size.h}，声明 ${a.frameHeight * a.rows}`)
+    assert.equal(a.frameHeight, 360, `${a.id} 单帧高度应为 360（否则会画出上下相邻行）`)
+  }
+  assert.ok(checked >= 40, `只校验了 ${checked} 张，素材可能缺失`)
+})
