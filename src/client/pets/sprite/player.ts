@@ -28,6 +28,8 @@ export interface SpritePlayer {
   play: (id: string, once?: boolean, hold?: boolean, from?: number, onEnd?: () => void) => void
   /** 当前动作 id（调试/日志） */
   current: () => string
+  /** 提前加载接下来要播的动作（轮换开始时就调用，避免到点还在等下载） */
+  preload: (ids: readonly string[]) => void
   destroy: () => void
 }
 
@@ -41,6 +43,9 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
   // 预载全部动作图（8 个 ≈ 7.6MB，一次载完最省心；多了再改成按需）
   const images = new Map<string, HTMLImageElement>()
   /** 等待图片加载的切换请求 */
+  /** 整帧快照：任何"没有可画图像"的帧都贴它，保证不空帧 */
+  const snapshot = document.createElement('canvas')
+  let snapshotReady = false
   let pendingPlay: { id: string; once: boolean; hold: boolean; from: number; onEnd?: () => void } | null = null
   /** 解码图缓存上限：显示只用到 1–2 张，没必要让几十张位图常驻（实测 44 张 ≈ 1.2GB 会卡死页面） */
   const CACHE_MAX = 3
@@ -226,7 +231,13 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     if (typeof document !== 'undefined' && document.hidden) return
     const img = images.get(current.id)
     if (img === undefined) {
-      // 目标动作还没加载（懒加载/即时补载中）：继续画上一帧，绝不空帧
+      // 目标动作还没加载：优先上一帧，没有就贴整帧快照，绝不空帧
+      if (lastGood === null && snapshotReady) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(snapshot, 0, 0, canvas.width, canvas.height)
+        raf = requestAnimationFrame(draw)
+        return
+      }
       if (lastGood !== null) {
         const lg = lastGood
         const fit = fitFor(lg.anim)
@@ -311,6 +322,17 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     }
     ctx.globalAlpha = 1
     if (fade >= 1) fadeStart = null
+    // 记录整帧快照（尺寸与画布一致，直接 copy）
+    if (snapshot.width !== canvas.width || snapshot.height !== canvas.height) {
+      snapshot.width = canvas.width
+      snapshot.height = canvas.height
+    }
+    const sctx = snapshot.getContext('2d')
+    if (sctx !== null) {
+      sctx.clearRect(0, 0, snapshot.width, snapshot.height)
+      sctx.drawImage(canvas, 0, 0)
+      snapshotReady = true
+    }
     raf = requestAnimationFrame(draw)
   }
   /**
@@ -386,6 +408,13 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
       }
       pendingPlay = null
       applyPlay(next, playOnce, holdLast, from, onEnd)
+    },
+    /** 提前加载接下来要播的动作（轮换开始时就调用，避免到点还在等下载） */
+    preload: (ids: readonly string[]) => {
+      for (const id of ids) {
+        const anim = pack.animations.find((a) => a.id === id)
+        if (anim !== undefined) void loadOne(anim)
+      }
     },
     current: () => current.id,
     destroy: () => {

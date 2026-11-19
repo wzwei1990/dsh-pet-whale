@@ -256,6 +256,16 @@ export const spritePet: PetModule = {
     /** 待机每 25s 换一段（还在待机才换） */
     const scheduleIdleRotate = (): void => {
       clearIdleRotate()
+      // 提前预取：本轮计时期间就把"下一段可能要播的动作"解码好，
+      // 避免到点时还在等图（表现为同一个动画多播一轮）
+      if (player) {
+        const actIds = (pack?.choreography?.activities ?? [])
+        const pool = idlePool()
+        const upcoming = idleRotations % 3 === 2
+          ? (actIds.length > 0 ? actIds : pool)
+          : pool
+        player.preload(upcoming.filter((id) => id !== lastTarget))
+      }
       idleRotateTimer = window.setTimeout(() => {
         idleRotateTimer = 0
         if (!player || !pack) return
