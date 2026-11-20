@@ -1,6 +1,6 @@
 {
   "name": "pet-whale",
-  "version": "1.4.32",
+  "version": "1.4.33",
   "description": "桌宠小鲸鱼：DeepSeek Harness 桌宠插件，桌面端和网页端都能用，随 agent 状态切换动画（官方轮廓版）",
   "homepage": "https://nzl153.github.io/dsh-pet-whale/preview.html",
   "repository": {
@@ -38,6 +38,7 @@
     "cordis.patch.yml"
   ],
   "engines": {
+    "dsh": ">=0.2.2-rc.0 <0.3.0-0",
     "node": "^22.19.0 || >=24.0.0"
   },
   "dsh": {
@@ -55,16 +56,14 @@
       ]
     },
     "compatibility": {
-      "dsh": ">=0.1.5-alpha.2 <0.3.0",
+      "dsh": ">=0.2.2-rc.0 <0.3.0-0",
       "dshReleases": {
-        "0.1.5-alpha.2": "compatible",
-        "0.1.5-rc.1": "compatible",
-        "0.1.5-rc.2": "compatible",
-        "0.1.5-rc.3": "compatible",
-        "0.1.7-rc.1": "compatible",
-        "0.1.7-rc.2": "compatible",
-        "0.2.0-rc.1": "compatible",
-        "0.2.0-rc.2": "compatible"
+        "0.2.2": "compatible",
+        "0.2.2-rc.5": "compatible",
+        "0.2.2-rc.4": "compatible",
+        "0.2.2-rc.3": "compatible",
+        "0.2.2-rc.2": "compatible",
+        "0.2.2-rc.1": "compatible"
       }
     }
   },

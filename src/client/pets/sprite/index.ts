@@ -558,6 +558,7 @@ export const spritePet: PetModule = {
       el.removeEventListener('click', onClick)
       el.removeEventListener('mouseenter', onEnter)
       window.removeEventListener('pet-whale-react', onReactEvent)
+    delete (window as unknown as { __pwhSpriteBusy?: () => boolean }).__pwhSpriteBusy
       clearIdleRotate()
       clearWorkingRotate()
       clearThinkRotate()

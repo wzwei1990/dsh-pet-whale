@@ -457,6 +457,8 @@ export function apply(ctx: Context): () => void {
       document.hidden ||
       menu.classList.contains('open') ||
       sleeping ||
+      // 精灵正在播一次性动作/表情/说话：散步不要打断
+      ((window as unknown as { __pwhSpriteBusy?: () => boolean }).__pwhSpriteBusy?.() ?? false) ||
       // 待机微游动的补间还没走完，此时启动游泳会两套动画抢同一个 left
       Date.now() < microSwimUntil ||
       visualState !== 'idle',

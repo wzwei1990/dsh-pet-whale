@@ -128,10 +128,17 @@ export interface Fit { scale: number; dx: number; dy: number }
 
 export function computeFit(bbox: Box, idleBox: Box | null, canvasW: number, canvasH: number): Fit {
   const ref = idleBox ?? bbox
-  const scale = (canvasH * 0.92) / ref.h
+  const base = (canvasH * 0.92) / ref.h
+  // 头顶道具/举手动作比待机更高时，按自己的高度等比缩小到画布内（否则顶部被裁）；
+  // 不高于待机的动作一律用基准缩放，保证大小恒定
+  const scale = bbox.h > ref.h ? Math.min(base, (canvasH * 0.98) / bbox.h) : base
+  let dy = canvasH - (bbox.y0 + bbox.h) * scale - canvasH * 0.02
+  // 浮点误差可能让顶部落到 -1e-14，硬钳到 0，避免"裁掉 1px"
+  const top = bbox.y0 * scale + dy
+  if (top < 0) dy -= top
   return {
     scale,
     dx: canvasW / 2 - (bbox.x0 + bbox.w / 2) * scale,
-    dy: canvasH - (bbox.y0 + bbox.h) * scale - canvasH * 0.02,
+    dy,
   }
 }

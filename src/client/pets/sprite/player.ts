@@ -28,6 +28,8 @@ export interface SpritePlayer {
   play: (id: string, once?: boolean, hold?: boolean, from?: number, onEnd?: () => void, onLoop?: () => void) => void
   /** 当前动作 id（调试/日志） */
   current: () => string
+  /** 当前是否在播一次性动作（点击/表情等），散步期间不应打断 */
+  currentIsOnce: () => boolean
   /** 提前加载接下来要播的动作（轮换开始时就调用，避免到点还在等下载） */
   preload: (ids: readonly string[]) => void
   destroy: () => void
@@ -426,6 +428,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
       }
     },
     current: () => current.id,
+    currentIsOnce: () => once,
     destroy: () => {
       stopped = true
       cancelAnimationFrame(raf)
