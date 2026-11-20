@@ -199,7 +199,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     if (bbox === null) return fallback
     const idleAnim = pack.animations.find((a) => a.id === pack.idleAnimationId)
     const idleBox = idleAnim !== undefined ? bboxOf(idleAnim) : null
-    return computeFit(bbox, idleBox, pack.canvasWidth, pack.canvasHeight)
+    return computeFit(bbox, idleBox, pack.canvasWidth, pack.canvasHeight, pack.maxContentHeight)
   }
 
   /** 播放倍速（manifest.playbackRate，默认 1） */

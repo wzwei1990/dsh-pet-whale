@@ -92,3 +92,13 @@ test('网格声明与图片实际尺寸一致（防串帧/裁切）', () => {
   }
   assert.ok(checked >= 40, `只校验了 ${checked} 张，素材可能缺失`)
 })
+
+test('内容高度表：每段 bboxHeight 不超单帧高度，全局最大值一致', () => {
+  let max = 0
+  for (const a of manifest.animations) {
+    assert.ok(typeof a.bboxHeight === 'number' && a.bboxHeight > 0, `${a.id} 缺少 bboxHeight（会导致缩放抖动）`)
+    assert.ok(a.bboxHeight <= a.frameHeight, `${a.id} bboxHeight ${a.bboxHeight} 超过单帧高度 ${a.frameHeight}`)
+    max = Math.max(max, a.bboxHeight)
+  }
+  assert.equal(manifest.maxContentHeight, max, 'maxContentHeight 必须等于所有动作的最高内容')
+})

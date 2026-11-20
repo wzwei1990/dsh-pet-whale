@@ -142,10 +142,10 @@ import { computeFit } from '../lib/pick.mjs'
 
 test('取景缩放固定：不同包围盒的动作缩放一致（防忽大忽小）', () => {
   const idle = { x0: 100, y0: 60, w: 400, h: 300 }
-  const a = computeFit({ x0: 120, y0: 40, w: 380, h: 300 }, idle, 640, 360)
-  const b = computeFit({ x0: 60, y0: 100, w: 520, h: 260 }, idle, 640, 360)
+  const a = computeFit({ x0: 120, y0: 40, w: 380, h: 300 }, idle, 640, 360, 322)
+  const b = computeFit({ x0: 60, y0: 100, w: 520, h: 260 }, idle, 640, 360, 322)
   assert.equal(a.scale, b.scale, '缩放必须相同')
-  assert.ok(Math.abs(a.scale - (360 * 0.92) / 300) < 1e-9, '缩放按待机包围盒计算')
+  assert.ok(Math.abs(a.scale - (360 * 0.94) / 322) < 1e-9, '缩放按全局最高内容高度计算')
 })
 
 test('取景：每段动作按自己的包围盒居中且贴底', () => {
@@ -158,20 +158,21 @@ test('取景：每段动作按自己的包围盒居中且贴底', () => {
   assert.ok(Math.abs(center - 320) < 1e-6, '水平居中')
 })
 
-test('取景：比待机更高的动作等比缩小，避免头顶被裁', () => {
+test('取景：高动作用同一个全局缩放（不再单独变小），且顶部不被裁', () => {
   const idle = { x0: 100, y0: 60, w: 400, h: 300 }
-  const tall = { x0: 100, y0: 0, w: 400, h: 340 }
-  const fit = computeFit(tall, idle, 640, 360)
+  const tall = { x0: 100, y0: 0, w: 400, h: 322 }
+  const fit = computeFit(tall, idle, 640, 360, 322)
+  const fitIdle = computeFit(idle, idle, 640, 360, 322)
+  assert.equal(fit.scale, fitIdle.scale, '缩放必须与待机一致（否则切换会突然变小）')
   const top = tall.y0 * fit.scale + fit.dy
-  assert.ok(top >= 0, '顶部不能出画（实际 ' + top.toFixed(1) + '）')
-  assert.ok(fit.scale < (360 * 0.92) / 300, '高动作应比基准缩放更小')
+  assert.ok(top >= -1e-6, '顶部不能出画（实际 ' + top.toFixed(1) + '）')
   const bottom = (tall.y0 + tall.h) * fit.scale + fit.dy
   assert.ok(Math.abs(bottom - 360 * 0.98) < 1e-6, '仍然贴底')
 })
 
-test('取景：不高于待机的动作仍用基准缩放（大小恒定）', () => {
+test('取景：普通动作与待机同缩放（大小恒定）', () => {
   const idle = { x0: 100, y0: 60, w: 400, h: 300 }
   const short = { x0: 120, y0: 150, w: 360, h: 210 }
-  const fit = computeFit(short, idle, 640, 360)
-  assert.ok(Math.abs(fit.scale - (360 * 0.92) / 300) < 1e-9)
+  const fit = computeFit(short, idle, 640, 360, 322)
+  assert.ok(Math.abs(fit.scale - (360 * 0.94) / 322) < 1e-9)
 })

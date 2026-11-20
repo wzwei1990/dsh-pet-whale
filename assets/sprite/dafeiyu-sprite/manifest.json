@@ -38,7 +38,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 270
   },
   {
    "id": "click-tsundere",
@@ -51,7 +52,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 15
+   "startFrame": 15,
+   "bboxHeight": 267
   },
   {
    "id": "click-wave",
@@ -64,7 +66,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 275
   },
   {
    "id": "run-left",
@@ -77,7 +80,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 16
+   "startFrame": 16,
+   "bboxHeight": 273
   },
   {
    "id": "float-step",
@@ -90,7 +94,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 272
   },
   {
    "id": "juggle",
@@ -103,7 +108,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 21
+   "startFrame": 21,
+   "bboxHeight": 276
   },
   {
    "id": "walk-crab",
@@ -116,7 +122,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 9
+   "startFrame": 9,
+   "bboxHeight": 266
   },
   {
    "id": "drag",
@@ -129,7 +136,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 11
+   "startFrame": 11,
+   "bboxHeight": 305
   },
   {
    "id": "talk-mumble-screen",
@@ -142,7 +150,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 267
   },
   {
    "id": "talk-mumble-daze",
@@ -155,7 +164,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 21
+   "startFrame": 21,
+   "bboxHeight": 267
   },
   {
    "id": "talk-mumble-wipe",
@@ -168,7 +178,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 18
+   "startFrame": 18,
+   "bboxHeight": 266
   },
   {
    "id": "talk-hum",
@@ -181,7 +192,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 11
+   "startFrame": 11,
+   "bboxHeight": 322
   },
   {
    "id": "state-celebrate",
@@ -194,7 +206,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 27
+   "startFrame": 27,
+   "bboxHeight": 278
   },
   {
    "id": "state-think",
@@ -207,7 +220,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 8
+   "startFrame": 8,
+   "bboxHeight": 277
   },
   {
    "id": "state-working",
@@ -220,7 +234,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 16
+   "startFrame": 16,
+   "bboxHeight": 319
   },
   {
    "id": "state-wait",
@@ -233,7 +248,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 23
+   "startFrame": 23,
+   "bboxHeight": 269
   },
   {
    "id": "state-shy",
@@ -246,7 +262,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 11
+   "startFrame": 11,
+   "bboxHeight": 267
   },
   {
    "id": "talk-deep",
@@ -259,7 +276,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 10
+   "startFrame": 10,
+   "bboxHeight": 273
   },
   {
    "id": "talk-food",
@@ -272,7 +290,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 2
+   "startFrame": 2,
+   "bboxHeight": 278
   },
   {
    "id": "talk-giggle",
@@ -285,7 +304,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 33
+   "startFrame": 33,
+   "bboxHeight": 269
   },
   {
    "id": "state-celebrate-lively",
@@ -298,7 +318,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 11
+   "startFrame": 11,
+   "bboxHeight": 311
   },
   {
    "id": "state-sleep",
@@ -311,7 +332,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 21
+   "startFrame": 21,
+   "bboxHeight": 301
   },
   {
    "id": "state-wake",
@@ -324,7 +346,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 22
+   "startFrame": 22,
+   "bboxHeight": 305
   },
   {
    "id": "state-error",
@@ -337,7 +360,8 @@
    "frameHeight": 360,
    "frameCount": 64,
    "fps": 12,
-   "startFrame": 26
+   "startFrame": 26,
+   "bboxHeight": 271
   },
   {
    "id": "state-archive",
@@ -350,7 +374,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 266
   },
   {
    "id": "play-cube",
@@ -363,7 +388,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 267
   },
   {
    "id": "play-gomoku",
@@ -376,7 +402,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 23
+   "startFrame": 23,
+   "bboxHeight": 268
   },
   {
    "id": "play-violin",
@@ -389,7 +416,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 17
+   "startFrame": 17,
+   "bboxHeight": 268
   },
   {
    "id": "play-cat",
@@ -402,7 +430,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 267
   },
   {
    "id": "eat-breakfast",
@@ -415,7 +444,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 267
   },
   {
    "id": "eat-lunch",
@@ -428,7 +458,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 19
+   "startFrame": 19,
+   "bboxHeight": 270
   },
   {
    "id": "eat-dinner",
@@ -441,7 +472,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 1
+   "startFrame": 1,
+   "bboxHeight": 267
   },
   {
    "id": "balance-normal",
@@ -454,7 +486,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 272
   },
   {
    "id": "balance-empty",
@@ -467,7 +500,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 7
+   "startFrame": 7,
+   "bboxHeight": 278
   },
   {
    "id": "balance-rich",
@@ -480,7 +514,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 283
   },
   {
    "id": "idle-mirror",
@@ -493,7 +528,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 5
+   "startFrame": 5,
+   "bboxHeight": 273
   },
   {
    "id": "idle-fan",
@@ -506,7 +542,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 8
+   "startFrame": 8,
+   "bboxHeight": 278
   },
   {
    "id": "hover-startled",
@@ -519,7 +556,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 294
   },
   {
    "id": "state-squash",
@@ -532,7 +570,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 29
+   "startFrame": 29,
+   "bboxHeight": 273
   },
   {
    "id": "state-stretch",
@@ -545,7 +584,8 @@
    "frameHeight": 360,
    "frameCount": 120,
    "fps": 12,
-   "startFrame": 30
+   "startFrame": 30,
+   "bboxHeight": 269
   },
   {
    "id": "talk-sing",
@@ -558,7 +598,8 @@
    "frameHeight": 360,
    "frameCount": 184,
    "fps": 12,
-   "startFrame": 12
+   "startFrame": 12,
+   "bboxHeight": 302
   },
   {
    "id": "talk-phone",
@@ -571,7 +612,8 @@
    "frameHeight": 360,
    "frameCount": 184,
    "fps": 12,
-   "startFrame": 11
+   "startFrame": 11,
+   "bboxHeight": 281
   },
   {
    "id": "talk-vocal",
@@ -584,7 +626,8 @@
    "frameHeight": 360,
    "frameCount": 184,
    "fps": 12,
-   "startFrame": 9
+   "startFrame": 9,
+   "bboxHeight": 288
   },
   {
    "id": "talk-clapper",
@@ -597,7 +640,8 @@
    "frameHeight": 360,
    "frameCount": 184,
    "fps": 12,
-   "startFrame": 0
+   "startFrame": 0,
+   "bboxHeight": 282
   }
  ],
  "playbackRate": 1.2,
@@ -683,5 +727,6 @@
    "talk-vocal",
    "talk-deep"
   ]
- }
+ },
+ "maxContentHeight": 322
 }

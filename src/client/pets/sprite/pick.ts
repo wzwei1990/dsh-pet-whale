@@ -126,14 +126,14 @@ export function avoidSame(play: string | undefined, lastTarget: string, pool: re
 export interface Box { x0: number; y0: number; w: number; h: number }
 export interface Fit { scale: number; dx: number; dy: number }
 
-export function computeFit(bbox: Box, idleBox: Box | null, canvasW: number, canvasH: number): Fit {
+export function computeFit(bbox: Box, idleBox: Box | null, canvasW: number, canvasH: number, maxContentHeight?: number): Fit {
   const ref = idleBox ?? bbox
-  const base = (canvasH * 0.92) / ref.h
-  // 头顶道具/举手动作比待机更高时，按自己的高度等比缩小到画布内（否则顶部被裁）；
-  // 不高于待机的动作一律用基准缩放，保证大小恒定
-  const scale = bbox.h > ref.h ? Math.min(base, (canvasH * 0.98) / bbox.h) : base
+  // 缩放按"所有动作里最高的那个"统一算一次：高动作能完整显示，且所有动作大小一致
+  // （按单段缩小会造成切换时人物突然变小）
+  const height = Math.max(maxContentHeight ?? ref.h, 1)
+  const scale = (canvasH * 0.94) / height
   let dy = canvasH - (bbox.y0 + bbox.h) * scale - canvasH * 0.02
-  // 浮点误差可能让顶部落到 -1e-14，硬钳到 0，避免"裁掉 1px"
+  // 兜底：万一实际包围盒比记录更高，钳到顶不裁
   const top = bbox.y0 * scale + dy
   if (top < 0) dy -= top
   return {

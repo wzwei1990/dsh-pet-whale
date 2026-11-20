@@ -30,6 +30,8 @@ export interface SpriteAnimation {
    * 由 tools/detect-start-frame 那套规则生成（与静帧平均差 >8 的第一帧）。
    */
   startFrame?: number
+  /** 该动作内容包围盒高度（构建期实测，用于全局统一缩放） */
+  bboxHeight?: number
 }
 
 /** 动作池（点击/悬停共用同一形状）。 */
@@ -91,6 +93,8 @@ export interface SpritePack {
     speed?: number
   }
   animations: SpriteAnimation[]
+  /** 所有动作里最高的内容高度：全局缩放按它算，保证高动作不被裁且大小恒定 */
+  maxContentHeight?: number
 }
 
 /** 拉清单；包根由调用方给（默认插件路由）。 */
