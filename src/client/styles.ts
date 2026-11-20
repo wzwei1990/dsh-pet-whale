@@ -793,6 +793,71 @@ body[data-pet-aquatic='false'] .pw-drag-drip {
   animation: pw-badgeSway 2.8s ease-in-out infinite, pw-badgePop 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
 }
 
+/* 角标悬停面板：列出"在跑 / 待确认"的会话（原生 title 太小且延迟大） */
+[data-dsh-whale] .dsh-whale-badge {
+  pointer-events: auto;
+  cursor: pointer;
+}
+[data-dsh-whale] .dsh-whale-badge-panel {
+  position: absolute;
+  top: calc(var(--pw-badge-top, 4px) + 26px);
+  left: calc(var(--pw-badge-left, -6px) - 4px);
+  min-width: 168px;
+  max-width: 280px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(120, 150, 200, 0.25);
+  box-shadow: 0 8px 28px rgba(20, 40, 80, 0.18);
+  backdrop-filter: blur(14px);
+  color: #22314a;
+  font-size: calc(11px * var(--pw-scale, 1));
+  line-height: 1.5;
+  pointer-events: auto;
+  z-index: 6;
+}
+[data-dsh-whale][data-facing="right"] .dsh-whale-badge-panel {
+  left: auto;
+  right: calc(var(--pw-badge-right, -6px) - 4px);
+}
+[data-dsh-whale] .dsh-whale-badge-panel[hidden] { display: none !important; }
+[data-dsh-whale] .pw-badge-head {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #2b4a78;
+}
+[data-dsh-whale] .dsh-whale-badge-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 168px;
+  overflow: auto;
+}
+[data-dsh-whale] .dsh-whale-badge-panel li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+[data-dsh-whale] .pw-badge-icon { flex: none; font-size: 9px; }
+[data-dsh-whale] .pw-badge-icon.wait { color: #c98a1f; }
+[data-dsh-whale] .pw-badge-icon.run { color: #3d8b5f; }
+[data-dsh-whale] .pw-badge-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-dsh-whale] .pw-badge-tag {
+  flex: none;
+  opacity: 0.55;
+  font-size: 9px;
+}
+
 @keyframes pw-patPress {
   0%   { transform: scale(1, 1); }
   35%  { transform: scale(1.05, 0.9); }

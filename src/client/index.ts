@@ -106,6 +106,10 @@ interface SessionStatusSource {
   subscribe(fn: () => void): () => void
 }
 
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] ?? ch)
+}
+
 export function apply(ctx: Context): () => void {
   if (typeof document === 'undefined') return () => {}
 
@@ -170,10 +174,12 @@ export function apply(ctx: Context): () => void {
     <span class="dsh-whale-zzz">Zzz...</span>
     <div class="pet-official idle" role="img" aria-label="${strings.aria.petName(petDisplayName(activePet))}">${activePet.html}</div>
     <span class="dsh-whale-badge" hidden></span>
+    <div class="dsh-whale-badge-panel" hidden></div>
     <div class="dsh-whale-menu" role="menu"></div>
   `
   const dialog = root.querySelector<HTMLElement>('.dsh-whale-dialog')!
   const badge = root.querySelector<HTMLElement>('.dsh-whale-badge')!
+  const badgePanel = root.querySelector<HTMLElement>('.dsh-whale-badge-panel')!
   const snack = root.querySelector<HTMLElement>('.dsh-whale-snack')!
   // 容器本身永不重建，只有它的 innerHTML 随宠物切换 → 容器上的状态 class 原地保留
   const pet = root.querySelector<HTMLElement>('.pet-official')!
@@ -450,6 +456,10 @@ export function apply(ctx: Context): () => void {
     getStrings: () => strings,
     petSize,
     isAquatic: () => activePet.aquatic === true,
+    movementIds: () => (window as unknown as { __pwhSpriteMovementIds?: () => string[] }).__pwhSpriteMovementIds?.() ?? [],
+    preload: (ids: string[]) => (window as unknown as { __pwhSpritePreload?: (ids: string[]) => void }).__pwhSpritePreload?.(ids),
+    isReady: (ids: string[]) =>
+      (window as unknown as { __pwhSpriteReady?: (ids: string[]) => boolean }).__pwhSpriteReady?.(ids) ?? true,
     isBusy: () =>
       root.classList.contains(HIDDEN_CLASS) ||
       dragStart !== null ||
@@ -2462,6 +2472,8 @@ export function apply(ctx: Context): () => void {
         + (names.length > 0 ? '\n· ' + names.join('\n· ') + (n > names.length ? '\n…' : '') : '')
         + (waits.length > 0 ? '\n⏳ ' + waits.join('\n⏳ ') : '')
     // 数字变了就弹一下；先摘类再强制回流，连续变化也能重新播
+    if (n === 0) hideBadgePanel()
+    else if (badgePanel.classList.contains('open')) renderBadgePanel()
     if (n > 0 && n !== badgeCount) {
       badge.classList.remove('pop')
       void badge.offsetWidth
@@ -2470,6 +2482,61 @@ export function apply(ctx: Context): () => void {
     if (n > 0) startFollow()
     badgeCount = n
   }
+
+  // 角标面板：原生 title 太小且要等，改成悬停/点击弹出列表
+  let panelHideTimer = 0
+  const hideBadgePanel = (): void => {
+    if (panelHideTimer !== 0) {
+      cancelLater(panelHideTimer)
+      panelHideTimer = 0
+    }
+    badgePanel.hidden = true
+    badgePanel.classList.remove('open')
+  }
+  const renderBadgePanel = (): void => {
+    const summary = followAll ? badgeSummary(otherSessions) : { count: 0, titles: [], waiting: [] }
+    if (summary.count === 0) {
+      hideBadgePanel()
+      return
+    }
+    const rows: string[] = []
+    for (const title of summary.waiting.slice(0, 6)) {
+      rows.push(`<li><span class="pw-badge-icon wait">⏳</span><span class="pw-badge-title">${escapeHtml(title)}</span><span class="pw-badge-tag">待确认</span></li>`)
+    }
+    for (const title of summary.titles.slice(0, 6)) {
+      rows.push(`<li><span class="pw-badge-icon run">●</span><span class="pw-badge-title">${escapeHtml(title)}</span><span class="pw-badge-tag">在跑</span></li>`)
+    }
+    badgePanel.innerHTML = `<div class="pw-badge-head">${escapeHtml(strings.multi.badge(summary.count))}</div><ul>${rows.join('')}</ul>`
+  }
+  const showBadgePanel = (): void => {
+    if (panelHideTimer !== 0) {
+      cancelLater(panelHideTimer)
+      panelHideTimer = 0
+    }
+    renderBadgePanel()
+    badgePanel.hidden = false
+    badgePanel.classList.add('open')
+  }
+  const scheduleHideBadgePanel = (): void => {
+    if (panelHideTimer !== 0) return
+    panelHideTimer = later(() => {
+      panelHideTimer = 0
+      hideBadgePanel()
+    }, 220)
+  }
+  badge.addEventListener('pointerenter', showBadgePanel)
+  badge.addEventListener('pointerleave', scheduleHideBadgePanel)
+  badge.addEventListener('click', (event) => {
+    event.stopPropagation()
+    if (panelHideTimer !== 0) {
+      cancelLater(panelHideTimer)
+      panelHideTimer = 0
+    }
+    if (badgePanel.classList.contains('open')) hideBadgePanel()
+    else showBadgePanel()
+  })
+  badgePanel.addEventListener('pointerenter', showBadgePanel)
+  badgePanel.addEventListener('pointerleave', scheduleHideBadgePanel)
 
   const recountOthers = () => {
     if (statusSource === undefined) return

@@ -16,6 +16,12 @@ export interface SwimContext {
   showDialog: (text: string) => void
   getStrings: () => PetStrings
   isBusy: () => boolean
+  /** 移动动画 id（散步前确认这些能播） */
+  movementIds?: () => string[]
+  /** 预加载这些动画 */
+  preload?: (ids: string[]) => void
+  /** 这些动画是否都已解码好 */
+  isReady?: (ids: string[]) => boolean
   /** 当前实际占位，随缩放变——粒子挂在全局层用视口坐标，必须按真尺寸算 */
   petSize: () => { w: number; h: number }
   /**
@@ -77,6 +83,11 @@ export class WhaleSwimmer {
   private lastRippleTime = 0
   private lastStreamBubbleTime = 0
   private hasSplashedThisSession = false
+  /** 移动动画还没就绪时的重试次数（避免"人先走、动画后到"） */
+  private readyRetries = 0
+  /** 位置长时间不变就提前收尾（贴边钳制时会出现"停下了但动画还在走"） */
+  private lastFrame: Point = { x: 0, y: 0 }
+  private stallMs = 0
 
   constructor(ctx: SwimContext) {
     // 当前宠物 id 写在 root.dataset.pet 上；人形 Live2D 宠物不要鲸鱼的游泳特效
@@ -221,6 +232,19 @@ export class WhaleSwimmer {
   /** 启动一次自然游动或深潜 */
   private startSwimSession(): void {
     this.stop()
+    // 走路动画没解码好就先原地等（最多 3 次、每次 200ms），否则会先移动、动作后到
+    {
+      const ids = this.ctx.movementIds?.() ?? []
+      if (ids.length > 0 && this.ctx.isReady !== undefined && !this.ctx.isReady(ids)) {
+        this.ctx.preload?.(ids)
+        if (this.readyRetries < 3) {
+          this.readyRetries += 1
+          this.timerId = window.setTimeout(() => this.startSwimSession(), 200)
+          return
+        }
+      }
+      this.readyRetries = 0
+    }
 
     // 游动期间由本循环逐帧写 left/top，容器上绝不能留着 transition：
     // 留着的话每帧写入都会被补间拦截，鲸鱼钉在原地，而水花水纹按算出来的
@@ -249,6 +273,8 @@ export class WhaleSwimmer {
     this.hasSplashedThisSession = false
 
     this.isSwimming = true
+    this.lastFrame = { x: this.startPos.x, y: this.startPos.y }
+    this.stallMs = 0
     this.ctx.root.classList.add('swimming')
     this.ctx.pet.classList.add('swimming')
     if (this.currentMode === 'dive') {
@@ -262,6 +288,23 @@ export class WhaleSwimmer {
     }
 
     this.rafId = window.requestAnimationFrame(this.step)
+  }
+
+  /** 结束一次移动：收尾动画类、落位、并为下一次预取移动动画 */
+  private finishSwimSession(): void {
+    this.rafId = 0
+    this.isSwimming = false
+    this.stallMs = 0
+    this.ctx.root.classList.remove('swimming')
+    this.ctx.pet.classList.remove('swimming', 'swimming-dive')
+    this.ctx.root.dataset.facing = this.facing
+    this.ctx.pet.style.opacity = '1'
+    this.ctx.pet.style.transform = `scaleX(${this.facing === 'left' ? 1 : -1}) rotate(0deg)`
+    this.ctx.savePos()
+    // 为下一次散步预取移动动画（否则下一次起步又得等解码）
+    const ids = this.ctx.movementIds?.() ?? []
+    if (ids.length > 0) this.ctx.preload?.(ids)
+    this.scheduleNext()
   }
 
   /** 规划贝塞尔曲线航迹 */
@@ -553,6 +596,14 @@ export class WhaleSwimmer {
       u * u * u * this.targetPos.y
     // 曲线控制点可能越界，且动画中途视口可能缩小；不能只钳终点。
     const { x: curX, y: curY } = this.ctx.clampPos(rawX, rawY)
+    // 贴边钳制/轨迹退化时位置会提前停住，但 progress 还在涨 → 提前收尾
+    const movedPx = Math.hypot(curX - this.lastFrame.x, curY - this.lastFrame.y)
+    this.lastFrame = { x: curX, y: curY }
+    this.stallMs = movedPx < 0.15 ? this.stallMs + 16 : 0
+    if (progress > 0.35 && this.stallMs > 260) {
+      this.finishSwimSession()
+      return
+    }
 
     // 计算瞬时导数切线向量（用于确定朝向与俯仰角）
     const dX = 3 * u1 * u1 * (this.cp1.x - this.startPos.x) +
@@ -664,16 +715,7 @@ export class WhaleSwimmer {
     if (progress < 1) {
       this.rafId = window.requestAnimationFrame(this.step)
     } else {
-      this.rafId = 0
-      this.isSwimming = false
-      this.ctx.root.classList.remove('swimming')
-      this.ctx.pet.classList.remove('swimming', 'swimming-dive')
-      this.ctx.root.dataset.facing = this.facing
-      this.ctx.pet.style.opacity = '1'
-      this.ctx.pet.style.transform = `scaleX(${this.facing === 'left' ? 1 : -1}) rotate(0deg)`
-      this.ctx.savePos()
-
-      this.scheduleNext()
+      this.finishSwimSession()
     }
   }
 

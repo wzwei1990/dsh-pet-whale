@@ -30,6 +30,8 @@ export interface SpritePlayer {
   current: () => string
   /** 当前是否在播一次性动作（点击/表情等），散步期间不应打断 */
   currentIsOnce: () => boolean
+  /** 某段动画图是否已解码好（散步前用来确认能播了再走） */
+  has: (id: string) => boolean
   /** 提前加载接下来要播的动作（轮换开始时就调用，避免到点还在等下载） */
   preload: (ids: readonly string[]) => void
   destroy: () => void
@@ -429,6 +431,7 @@ export async function createSpritePlayer(options: SpritePlayerOptions): Promise<
     },
     current: () => current.id,
     currentIsOnce: () => once,
+    has: (id) => images.has(id),
     destroy: () => {
       stopped = true
       cancelAnimationFrame(raf)

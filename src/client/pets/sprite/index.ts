@@ -549,6 +549,18 @@ export const spritePet: PetModule = {
     // 重新挂载时如果语音还在播（隐藏期间开始的），立刻接上说话动作
     if (speakingFlag) setSpeaking(true)
 
+    // 对外钩子：散步/其他插件查询精灵状态用
+    ;(window as unknown as { __pwhSpriteBusy?: () => boolean }).__pwhSpriteBusy = () =>
+      speaking || player?.currentIsOnce() === true || (reactionAnim !== '' && performance.now() < reactionUntil)
+    ;(window as unknown as { __pwhSpritePreload?: (ids: string[]) => void }).__pwhSpritePreload = (ids) => player?.preload(ids)
+    ;(window as unknown as { __pwhSpriteReady?: (ids: string[]) => boolean }).__pwhSpriteReady = (ids) =>
+      ids.every((id) => player?.has(id) === true)
+    ;(window as unknown as { __pwhSpriteMovementIds?: () => string[] }).__pwhSpriteMovementIds = () =>
+      [
+        ...(pack?.movement?.leftAnimationId !== undefined ? [pack.movement.leftAnimationId] : []),
+        ...(pack?.movement?.rightAnimationId !== undefined ? [pack.movement.rightAnimationId] : []),
+        ...(pack?.idleAnimationId !== undefined ? [pack.idleAnimationId] : []),
+      ]
     observer = new MutationObserver(sync)
     observer.observe(el, { attributes: true, attributeFilter: ['class'] })
     if (rootEl) observer.observe(rootEl, { attributes: true, attributeFilter: ['class', 'data-facing'] })
@@ -558,7 +570,6 @@ export const spritePet: PetModule = {
       el.removeEventListener('click', onClick)
       el.removeEventListener('mouseenter', onEnter)
       window.removeEventListener('pet-whale-react', onReactEvent)
-    delete (window as unknown as { __pwhSpriteBusy?: () => boolean }).__pwhSpriteBusy
       clearIdleRotate()
       clearWorkingRotate()
       clearThinkRotate()
@@ -567,6 +578,10 @@ export const spritePet: PetModule = {
       applySpeaking = null
       applyReaction = null
       delete (window as unknown as { __pwhSpeak?: unknown }).__pwhSpeak
+      delete (window as unknown as { __pwhSpriteBusy?: () => boolean }).__pwhSpriteBusy
+      delete (window as unknown as { __pwhSpritePreload?: (ids: string[]) => void }).__pwhSpritePreload
+      delete (window as unknown as { __pwhSpriteReady?: (ids: string[]) => boolean }).__pwhSpriteReady
+      delete (window as unknown as { __pwhSpriteMovementIds?: () => string[] }).__pwhSpriteMovementIds
       delete (window as unknown as { __pwhSpriteSleep?: unknown }).__pwhSpriteSleep
       observer?.disconnect()
       observer = null
