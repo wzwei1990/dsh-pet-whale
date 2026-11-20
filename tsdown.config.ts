@@ -32,6 +32,16 @@ export default [
     outputOptions: { entryFileNames: 'pick.mjs' },
   },
   {
+    name: 'pet-whale/multi',
+    entry: { multi: 'src/client/multi.ts' },
+    outDir: 'lib',
+    format: 'esm',
+    platform: 'neutral',
+    dts: false,
+    clean: false,
+    outputOptions: { entryFileNames: 'multi.mjs' },
+  },
+  {
     name: 'pet-whale/client',
     entry: { client: 'src/client/index.ts' },
     outDir: 'lib',

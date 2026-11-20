@@ -40,7 +40,7 @@ try {
   // - 资产：assets/<live2d|sprite|moc3>/ 下的任意嵌套文件（运行时、精灵帧、moc3 模型与图集）
   //   资产由 Node 半的 /pet-whale/* 路由提供，必须随包分发；放行整棵资产树，
   //   但仍拒绝 .. 路径段。
-  const META = /^(?:package\.json|cordis\.patch\.yml|LICENSE|README(?:\.en)?\.md|lib\/(?:index\.mjs|client\.js|pick\.mjs|state\.mjs))$/
+  const META = /^(?:package\.json|cordis\.patch\.yml|LICENSE|README(?:\.en)?\.md|lib\/(?:index\.mjs|client\.js|pick\.mjs|state\.mjs|multi\.mjs))$/
   const ASSET = /^assets\/(?:live2d|sprite|moc3)\/(?:[^/\\]+\/)*[^/\\]+$/u
   for (const { path } of packed.files) {
     const ok = META.test(path) || (ASSET.test(path) && !path.split('/').includes('..'))

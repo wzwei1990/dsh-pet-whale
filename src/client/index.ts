@@ -13,6 +13,7 @@ import { PETS, loadPetId, petOf, savePetId, type PetModule } from './pets'
 import { detectBrowserLocale, getStrings, paletteName, petName, type PetLocale, type PetStrings } from './i18n'
 import { WhaleSwimmer } from './swim'
 import { currentSessionId, partialTextOf, partialHasToolCall, type SessionRow } from './host-snapshot'
+import { aggregateVisual, badgeSummary, type BackgroundSession } from './multi'
 
 // 官方 client 通道的服务闸：等 sessions / locale / uiConversation / uiSession 服务就绪后再 apply。
 // uiConversation 由 @deepseek-ai/dsh-client-ui-conversation 提供，
@@ -2434,6 +2435,8 @@ export function apply(ctx: Context): () => void {
   }
   let otherRunning = 0
   let otherWaiting = 0
+  /** 后台会话的聚合视图（喂给 multi.aggregateVisual / badgeSummary） */
+  let otherSessions: BackgroundSession[] = []
   /** 别的会话的事，要在状态切换的那句台词之后再说，不然会被盖掉 */
   let otherNews = ''
   const prevOtherRunning = new Map<string, boolean>()
@@ -2447,13 +2450,17 @@ export function apply(ctx: Context): () => void {
   /** 正在跑的其他会话标题：角标 tooltip 里列出来，避免只看到一个孤零零的数字 */
   let otherRunningTitles: string[] = []
   const updateBadge = () => {
-    const n = followAll ? otherRunning : 0
+    const s = followAll ? badgeSummary(otherSessions) : { count: 0, titles: [], waiting: [] }
+    const n = s.count
     badge.hidden = n === 0
     badge.textContent = n > 9 ? '9+' : String(n)
-    const names = otherRunningTitles.slice(0, 3)
+    const names = s.titles.slice(0, 3)
+    const waits = s.waiting.slice(0, 3)
     badge.title = n === 0
       ? ''
-      : strings.multi.badge(n) + (names.length > 0 ? '\n· ' + names.join('\n· ') + (n > names.length ? '\n…' : '') : '')
+      : strings.multi.badge(n)
+        + (names.length > 0 ? '\n· ' + names.join('\n· ') + (n > names.length ? '\n…' : '') : '')
+        + (waits.length > 0 ? '\n⏳ ' + waits.join('\n⏳ ') : '')
     // 数字变了就弹一下；先摘类再强制回流，连续变化也能重新播
     if (n > 0 && n !== badgeCount) {
       badge.classList.remove('pop')
@@ -2476,6 +2483,7 @@ export function apply(ctx: Context): () => void {
     let running = 0
     let waiting = 0
     const titles: string[] = []
+    const collected: BackgroundSession[] = []
     let done: string | undefined
     let newlyWaiting: string | undefined
     for (const [id, st] of snapshot) {
@@ -2490,6 +2498,13 @@ export function apply(ctx: Context): () => void {
       }
       const isRunning = st.running === true
       const isWaiting = st.pendingInteraction !== undefined
+      collected.push({
+        id,
+        title: rowOf(id)?.displayTitle ?? id,
+        running: isRunning,
+        pending: isWaiting,
+        failed: false,
+      })
       if (isRunning) {
         running++
         if (isRunning) titles.push(rowOf(id)?.displayTitle ?? id)
@@ -2507,6 +2522,7 @@ export function apply(ctx: Context): () => void {
     otherRunning = running
     otherRunningTitles = titles
     otherWaiting = waiting
+    otherSessions = collected
     updateBadge()
     if (followAll) {
       if (done !== undefined) {
@@ -2544,12 +2560,7 @@ export function apply(ctx: Context): () => void {
   }
 
   /** 当前会话闲着时，别的会话的状态顶上来：有人等确认 > 有人在跑 */
-  const withOthers = (state: WhaleState): WhaleState => {
-    if (!followAll || state !== 'idle') return state
-    if (otherWaiting > 0) return 'wait'
-    if (otherRunning > 0) return 'working'
-    return state
-  }
+  const withOthers = (state: WhaleState): WhaleState => aggregateVisual(state, otherSessions, followAll)
   // 并发播报：档位只升不降，一批活全部跑完（总数归零）才清零，免得人数在档内上下抖动时反复喊
   let busyTier = 0
   let peakRunning = 0
