@@ -42,6 +42,17 @@ export default [
     outputOptions: { entryFileNames: 'multi.mjs' },
   },
   {
+    // 桌面端渲染 bundle（Electron 窗口里跑，不依赖 DSH Client 服务）
+    name: 'pet-whale/desktop',
+    entry: { 'desktop-renderer': 'src/desktop/renderer.ts' },
+    outDir: 'lib',
+    format: 'esm',
+    platform: 'browser',
+    dts: false,
+    clean: false,
+    outputOptions: { entryFileNames: 'desktop-renderer.js' },
+  },
+  {
     name: 'pet-whale/client',
     entry: { client: 'src/client/index.ts' },
     outDir: 'lib',

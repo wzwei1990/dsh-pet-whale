@@ -20,7 +20,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { homedir } from 'node:os'
 import { dirname, join, normalize, resolve, sep } from 'node:path'
@@ -32,6 +32,96 @@ const here = dirname(fileURLToPath(import.meta.url))
  * 表情/动作事件队列：`pet_react` 工具写入，客户端轮询取走。
  * 不在回复正文里写内联标签（会污染工作回复），改用工具 + 事件通道。
  */
+// ── 桌面端（Electron）进程管理：由网页端右键菜单一键开关 ──
+const PKG_ROOT = resolve(here, '..')
+const DESKTOP_STATE_DIR = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'dsh-pet')
+const DESKTOP_STATE_FILE = join(DESKTOP_STATE_DIR, 'desktop.json')
+const ELECTRON_STAMP = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'pet-whale', 'electron', 'version.txt')
+let desktopChild = null
+let desktopSince = 0
+let desktopError = null
+
+const readDesktopState = () => {
+  try {
+    return JSON.parse(readFileSync(DESKTOP_STATE_FILE, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+const writeDesktopState = (value) => {
+  try {
+    mkdirSync(DESKTOP_STATE_DIR, { recursive: true })
+    writeFileSync(DESKTOP_STATE_FILE, JSON.stringify(value))
+  } catch {
+    // 状态文件写不了不影响运行
+  }
+}
+const desktopRunning = () => desktopChild !== null && desktopChild.exitCode === null
+const desktopStatus = () => ({
+  running: desktopRunning(),
+  pid: desktopChild?.pid ?? null,
+  since: desktopSince,
+  preparing: desktopRunning() && !existsSync(ELECTRON_STAMP),
+  error: desktopError,
+})
+
+const stopDesktop = () => {
+  if (!desktopRunning()) {
+    desktopChild = null
+    desktopSince = 0
+    writeDesktopState({ desired: false })
+    return desktopStatus()
+  }
+  const pid = desktopChild.pid
+  try {
+    if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+    else desktopChild.kill('SIGTERM')
+  } catch (error) {
+    desktopError = error instanceof Error ? error.message : String(error)
+  }
+  desktopChild = null
+  desktopSince = 0
+  writeDesktopState({ desired: false })
+  return desktopStatus()
+}
+
+const startDesktop = (log) => {
+  if (desktopRunning()) return desktopStatus()
+  desktopError = null
+  try {
+    const child = spawn(process.execPath, [join(PKG_ROOT, 'scripts', 'start-desktop.mjs')], {
+      cwd: PKG_ROOT,
+      env: { ...process.env, PET_WHALE_ROOT: PKG_ROOT },
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    desktopChild = child
+    desktopSince = Date.now()
+    writeDesktopState({ desired: true })
+    log?.('info', '桌面端桌宠已启动 pid=' + String(child.pid))
+    child.once('error', (error) => {
+      desktopError = error instanceof Error ? error.message : String(error)
+      desktopChild = null
+      desktopSince = 0
+      writeDesktopState({ desired: false })
+      log?.('warn', '桌面端启动失败: ' + desktopError)
+    })
+    child.once('exit', (code) => {
+      if (desktopChild === child) {
+        desktopChild = null
+        desktopSince = 0
+      }
+      // 用户从托盘退出也算"关掉"，不自动重启
+      writeDesktopState({ desired: false })
+      log?.('info', '桌面端已退出 code=' + String(code))
+    })
+  } catch (error) {
+    desktopError = error instanceof Error ? error.message : String(error)
+    log?.('warn', '桌面端启动失败: ' + desktopError)
+  }
+  return desktopStatus()
+}
+
 const reactions = []
 let reactionSeq = 0
 const REACTION_LIMIT = 50
@@ -388,6 +478,78 @@ export function apply(ctx) {
     }
     return out
   }
+  webServer.register({
+    path: '/pet-whale/api/desktop',
+    handler: (req, res) => {
+      const method = req.method ?? 'GET'
+      if (method === 'POST') {
+        let body = ''
+        req.on('data', (chunk) => {
+          body += chunk
+          if (body.length > 2048) req.destroy()
+        })
+        req.on('end', () => {
+          let action = ''
+          try {
+            action = String(JSON.parse(body).action ?? '')
+          } catch {
+            action = ''
+          }
+          if (action === 'start') startDesktop((level, msg) => log(ctx, level, msg))
+          else if (action === 'stop') stopDesktop()
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+          res.end(JSON.stringify(desktopStatus()))
+        })
+        return
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify(desktopStatus()))
+    },
+  })
+
+  // 上次退出前是"住在桌面"状态、且 Electron 已装好 → 自动拉起（避免首次触发下载）
+  try {
+    if (readDesktopState().desired === true && existsSync(ELECTRON_STAMP)) {
+      setTimeout(() => startDesktop((level, msg) => log(ctx, level, msg)), 2500)
+    }
+  } catch {
+    // 状态文件坏了不影响插件
+  }
+
+  // 会话状态广播：网页端把聚合后的状态 POST 上来，桌面端轮询读取（无需鉴权，仅本机路由）
+  let presence = { state: 'idle', sessions: 0, at: 0 }
+  webServer.register({
+    path: '/pet-whale/api/presence',
+    handler: (req, res) => {
+      if ((req.method ?? 'GET') === 'POST') {
+        let body = ''
+        req.on('data', (chunk) => {
+          body += chunk
+          if (body.length > 4096) req.destroy()
+        })
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body)
+            const allowed = new Set(['idle', 'think', 'working', 'wait', 'celebrate', 'error'])
+            if (allowed.has(data.state)) {
+              presence = {
+                state: data.state,
+                sessions: Number.isFinite(data.sessions) ? Math.max(0, Math.trunc(data.sessions)) : 0,
+                at: Date.now(),
+              }
+            }
+          } catch {
+            // 忽略坏负载
+          }
+          res.writeHead(204).end()
+        })
+        return
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify(presence))
+    },
+  })
+
   webServer.register({
     path: '/pet-whale/api/packs',
     handler: (req, res) => {

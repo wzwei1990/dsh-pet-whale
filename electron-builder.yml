@@ -1,0 +1,23 @@
+# electron-builder 配置：只打桌面端绿色包（Electron 本体不进 npm 包）
+appId: com.wzwei.petwhale.desktop
+productName: pet-whale
+directories:
+  output: dist-desktop
+  buildResources: runtime/desktop
+# 桌面端自己的入口（根 package.json 是 DSH 插件，不能直接当 Electron app）
+extraMetadata:
+  main: runtime/desktop/main.mjs
+files:
+  - runtime/desktop/**
+  - lib/desktop-renderer.js
+  - assets/sprite/**
+  - package.json
+asar: true
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  # icon: assets/pet-whale.ico   # 待补安装包图标
+portable:
+  artifactName: pet-whale-desktop-${version}-portable.exe

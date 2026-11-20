@@ -1,0 +1,8 @@
+{
+  "name": "pet-whale-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "pet-whale desktop pet window (Electron helper)",
+  "type": "module",
+  "main": "main.mjs"
+}

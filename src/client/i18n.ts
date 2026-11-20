@@ -39,6 +39,8 @@ export interface PetStrings {
     /** 外观面板里的「配色」分组标题 */
     colors: string
     behavior: string
+    /** 右键菜单：住到桌面（Electron 桌宠） */
+    desktop: string
     stats: string
     statsCompleted: (n: number) => string
     statsInteractions: (n: number) => string
@@ -110,6 +112,9 @@ export interface PetStrings {
     avoid: string
     swim: string[]
     swimOn: string
+    desktopOn: string
+    desktopOff: string
+    desktopPreparing: string
     swimOff: string
     followAllOn: string
     followAllOff: string
@@ -238,6 +243,7 @@ const zh: PetStrings = {
     pet: '🐾 宠物',
     colors: '🎨 配色',
     behavior: '行为',
+    desktop: '🖥️ 住到桌面',
     stats: '陪伴记录',
     statsCompleted: (n) => `🏆 已完成回合：${n}`,
     statsInteractions: (n) => `💬 亲密互动：${n} 次`,
@@ -321,6 +327,9 @@ const zh: PetStrings = {
       '摇摇尾巴，优雅地划水中 🐋',
     ],
     swimOn: '游泳模式已开启，我会自己到处游啦 🐳🌊',
+    desktopOn: '好，我到桌面上陪着你（右键托盘可以退出）🖥️',
+    desktopOff: '桌面上的我先收起来啦，需要再叫我~',
+    desktopPreparing: '正在准备桌面端（首次需要下载运行时，稍等一下）…',
     swimOff: '游泳模式已关闭，我乖乖待命~',
     followAllOn: '别的会话有动静我也会告诉你~',
     followAllOff: '好，我只盯着眼前这个会话~',
@@ -485,6 +494,7 @@ const en: PetStrings = {
     pet: '🐾 Pet',
     colors: '🎨 Colors',
     behavior: 'Behavior',
+    desktop: '🖥️ Live on desktop',
     stats: 'Companion Stats',
     statsCompleted: (n) => `🏆 Completed Turns: ${n}`,
     statsInteractions: (n) => `💬 Interactions: ${n}`,
@@ -567,6 +577,9 @@ const en: PetStrings = {
       'Wagging my tail, gliding smoothly 🐋',
     ],
     swimOn: 'Swimming mode on: I will roam around by myself 🐳🌊',
+    desktopOn: 'Okay, I am on your desktop now (quit from the tray menu) 🖥️',
+    desktopOff: 'Packed up from the desktop — call me again anytime~',
+    desktopPreparing: 'Preparing the desktop app (first run downloads its runtime)…',
     swimOff: 'Swimming mode off: I will stay put~',
     followAllOn: 'I will keep an eye on your other sessions too~',
     followAllOff: 'Got it, just this session~',

@@ -110,6 +110,7 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] ?? ch)
 }
 
+
 export function apply(ctx: Context): () => void {
   if (typeof document === 'undefined') return () => {}
 
@@ -127,6 +128,22 @@ export function apply(ctx: Context): () => void {
     timers.add(id)
     return id
   }
+
+/** 把聚合后的状态推给宿主（桌面端轮询这个接口跟随动画） */
+const publishPresence = (state: string, sessions: number): void => {
+  // 用 later() 注册，插件卸载/根节点被移除时会被统一取消
+  later(() => {
+    if (typeof fetch !== 'function') return
+    void fetch('/pet-whale/api/presence', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ state, sessions }),
+    }).catch(() => {
+      // 宿主未起/路由缺失时静默
+    })
+  }, 250)
+}
+
   const cancelLater = (id: number | undefined) => {
     window.clearTimeout(id)
     if (id !== undefined) timers.delete(id)
@@ -593,6 +610,7 @@ export function apply(ctx: Context): () => void {
       clearReaction()
     }
     visualState = effective
+    publishPresence(effective, otherRunning + otherWaiting)
     syncMiniState(effective)
     if (changed || !stateInitialized) {
       swimmer.onStateChange(effective)
@@ -865,6 +883,29 @@ export function apply(ctx: Context): () => void {
   }
 
   // ===== 隐藏 / 小按钮 / 状态指示 / 拖拽 / 定时 / 关闭 =====
+
+  /** 桌面端状态：网页端与桌面端同时开着时，网页端自动收起自己，避免叠两只 */
+  let desktopOn = false
+  let desktopAutoHidden = false
+  const pollDesktop = (): void => {
+    if (typeof fetch !== 'function') return
+    void fetch('/pet-whale/api/desktop', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : undefined))
+      .then((status: { running?: boolean } | undefined) => {
+        const running = status?.running === true
+        if (running !== desktopOn) desktopOn = running
+        if (running && !desktopAutoHidden && !root.classList.contains(HIDDEN_CLASS)) {
+          root.classList.add('desktop-hidden')
+          desktopAutoHidden = true
+        } else if (!running && desktopAutoHidden) {
+          root.classList.remove('desktop-hidden')
+          desktopAutoHidden = false
+        }
+      })
+      .catch(() => {
+        // 老宿主没有这个路由：忽略
+      })
+  }
   const HIDDEN_CLASS = 'hidden'
   const MINI_SIZE = 46
   let mini: HTMLButtonElement | null = null
@@ -1448,6 +1489,28 @@ export function apply(ctx: Context): () => void {
         appendMenuBtn('导入素材包…', () => {
           menu.classList.remove('open')
           openPackImport()
+        })
+        // 住到桌面：宿主负责拉起/结束 Electron；首次需要下载运行时
+        appendMenuBtn(`${strings.panel.desktop}${desktopOn ? ' ✓' : ''}`, () => {
+          const action = desktopOn ? 'stop' : 'start'
+          if (action === 'start') showDialog(strings.feedback.desktopPreparing)
+          void fetch('/pet-whale/api/desktop', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action }),
+          })
+            .then((response) => (response.ok ? response.json() : undefined))
+            .then((status: { running?: boolean } | undefined) => {
+              desktopOn = status?.running === true
+              showDialog(desktopOn ? strings.feedback.desktopOn : strings.feedback.desktopOff)
+              buildMenu('behavior')
+              menu.classList.add('open')
+              positionMenu(lastMenuPos.x, lastMenuPos.y)
+              pollDesktop()
+            })
+            .catch(() => {
+              showDialog(strings.feedback.desktopOff)
+            })
         })
         // 所有宠物都有"自己走走"能力：水生叫游泳，陆生叫散步（2026-11-19 用户要求恢复并改名）
         {
@@ -2189,8 +2252,8 @@ export function apply(ctx: Context): () => void {
   }
 
 // ===== 打瞌睡 =====
-  /** 睡多久自动醒一次（5 分钟）：一直睡到用户来碰也太死板 */
-  const NAP_WAKE_MS = () => 5 * 60_000
+  /** 睡多久自动醒一次（1 分钟）：一直睡到用户来碰也太死板 */
+  const NAP_WAKE_MS = () => 60_000
   let napWakeTimer: number | undefined
   let sleepTimer: number | undefined
   let sleeping = false
@@ -2734,6 +2797,8 @@ export function apply(ctx: Context): () => void {
     onStatus()
   }
 
+  pollDesktop()
+  const desktopPollTimer = window.setInterval(pollDesktop, 4000)
   markActive()
 
   // ===== 恢复隐藏状态（跨刷新记忆） =====
@@ -2798,6 +2863,7 @@ export function apply(ctx: Context): () => void {
     endPat()
     for (const id of timers) window.clearTimeout(id)
     timers.clear()
+    window.clearInterval(desktopPollTimer)
     classTimers.clear()
     removalObserver.disconnect()
     if (owner.__petWhaleDispose === dispose) delete owner.__petWhaleDispose

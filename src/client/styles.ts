@@ -778,6 +778,7 @@ body[data-pet-aquatic='false'] .pw-drag-drip {
 [data-dsh-whale] .pat-heart.show { animation: pw-heartFloat 1.1s ease-out forwards; }
 
 /* 角标气泡（元素由行为层生成，三只宠物都可用；位置用变量调） */
+[data-dsh-whale].desktop-hidden { display: none !important; }
 [data-dsh-whale] .dsh-whale-badge {
   position: absolute;
   top: var(--pw-badge-top, calc(4px * var(--pw-scale, 1)));

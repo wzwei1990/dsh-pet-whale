@@ -1,6 +1,6 @@
 {
   "name": "pet-whale",
-  "version": "1.4.36",
+  "version": "1.5.0",
   "description": "桌宠小鲸鱼：DeepSeek Harness 桌宠插件，桌面端和网页端都能用，随 agent 状态切换动画（官方轮廓版）",
   "homepage": "https://nzl153.github.io/dsh-pet-whale/preview.html",
   "repository": {
@@ -35,7 +35,9 @@
     "lib",
     "!lib/live2d-runtime.mjs",
     "assets",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "runtime/desktop",
+    "lib/desktop-renderer.js"
   ],
   "engines": {
     "dsh": ">=0.2.2-rc.0 <0.3.0-0",
@@ -79,7 +81,11 @@
     "prepack": "npm run verify",
     "verify:hmr": "node scripts/verify-hmr.mjs",
     "pet:doctor": "node scripts/doctor.mjs",
-    "preview": "node scripts/preview-pets.mjs"
+    "preview": "node scripts/preview-pets.mjs",
+    "desktop": "node scripts/start-desktop.mjs",
+    "desktop:ensure": "node scripts/ensure-electron.mjs",
+    "test:desktop": "node --test tests/desktop.test.mjs",
+    "desktop:pack": "electron-builder --config electron-builder.yml"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
